@@ -9,6 +9,8 @@
 #   docs/agents/lane.md
 #   docs/agents/foreman.md
 #   docs/agents/pr-loop.md
+#   docs/agents/triage.md
+#   docs/agents/diagnosing-bugs.md
 #   scripts/lane
 #   scripts/lane.sh
 #   scripts/review-bundle
@@ -31,6 +33,8 @@ SYNC_FILES=(
   docs/agents/lane.md
   docs/agents/foreman.md
   docs/agents/pr-loop.md
+  docs/agents/triage.md
+  docs/agents/diagnosing-bugs.md
   scripts/lane
   scripts/lane.sh
   scripts/review-bundle

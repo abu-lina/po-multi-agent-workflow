@@ -20,6 +20,8 @@ Stop and report if any of these hold:
 
 Report by commenting on the issue (`gh issue comment <issue> --body "..."`) and ending your turn. Don't guess at missing criteria.
 
+**Hard bug path.** If the issue is a bug and you cannot reproduce it with a single failing test or script after a genuine attempt, stop before writing any production code. Post a comment with: (a) every repro step you tried and what happened, (b) what feedback loop you'd need to proceed (test harness, captured artifact, environment access), and (c) the exact question for the owner. The foreman routes hard bugs through the diagnosing-bugs discipline (see `docs/agents/diagnosing-bugs.md` if present) before the lane picks them up again.
+
 Read only what the issue needs. Start from the files the issue names, then follow imports. Don't read `docs/`, `agent-output/`, or unrelated features unless a failing test leads you there.
 
 ## 1. Red: tests from acceptance criteria

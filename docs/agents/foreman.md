@@ -57,6 +57,20 @@ herdr agent read foreman --source visible --lines 3 | grep -oE 'Context: [0-9]+k
 
 If it is above 100k, append the checkpoint state to the log, tell the owner, and stop for a restart. Never restart mid-round while a lane is blocked.
 
+## 0.5. Triage incoming issues (before picking lanes)
+
+Before picking lanes, scan for unlabelled or `needs-triage` issues and surface them to the owner. Follow `docs/agents/triage.md`:
+
+```bash
+gh issue list --state open \
+  --json number,title,labels,updatedAt \
+  --jq '.[] | select(([.labels[].name] | length == 0) or ([.labels[].name] | any(. == "needs-triage"))) | "\(.number)\t\(.title)"'
+```
+
+For each hit: gather context, recommend a category and state, wait for the owner's direction, then apply the outcome (agent brief, needs-info, wontfix). Only after the triage pass is clear do you move to step 1.
+
+**Hard bug escalation.** If a lane reports it cannot reproduce a bug, bring it back through triage before re-queuing: reproduce the bug with a tight feedback loop (failing test or script), then update the issue brief with confirmed repro steps and re-label `ready`. Do not re-queue a bug lane without a confirmed repro.
+
 ## 1. Pick issues
 
 ```bash
@@ -69,7 +83,7 @@ Until the backlog is re-labelled, also list `--label ready-for-agent` and treat 
 
 Label edits prompt the owner on every call. The foreman names the issue and label in chat before running the label edit, so the owner knows what the prompt is for.
 
-Only propose lanes for issues labelled `ready`. `ready` means the issue went through a `/grill-with-docs` session and its acceptance criteria are in "when I do X, I see Y" form. Never propose a lane for an issue that skipped Issue Maturation — comment on the issue asking the owner to run a grill session first and skip it.
+Only propose lanes for issues labelled `ready`. `ready` means the issue went through a triage or grill session and its acceptance criteria are in "when I do X, I see Y" form. Never propose a lane for an issue that skipped Issue Maturation — comment on the issue asking the owner to run a triage or grill session first and skip it.
 
 Filter:
 
