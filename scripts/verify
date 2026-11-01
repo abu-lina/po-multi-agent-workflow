@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Run all checks. All must pass before pushing. Called by lane.md step 4 and
+# pr-loop.md fix-CI step. Replace the TODO below with your project's commands.
+#
+# Example for a Next.js/Vitest/Playwright project:
+#
+#   npm run type-check
+#   npm run lint
+#   npx vitest run
+#   NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co \
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_placeholder \
+#   npm run build
+#
+# Keep one command per line so a single failure is easy to reproduce.
+
+set -euo pipefail
+
+# TODO: replace with your project's verify commands
+echo "scripts/verify: no commands configured. Edit this file to add your project's check commands." >&2
+exit 1

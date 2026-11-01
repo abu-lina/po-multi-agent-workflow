@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Writes everything a review subagent needs about one PR into a single file and
+# prints its path: the diff, the linked issue's acceptance criteria and the
+# PR-head content of every touched file. Read-only against GitHub; the
+# only write is the bundle, in a private directory under $TMPDIR. Bundles are
+# left for the OS to clean up.
+#
+#   scripts/review-bundle <pr-number>
+#
+# .devin/foreman.json allows Exec(scripts/review-bundle) with any arguments, so
+# the argument check below is the only guard.
+
+set -uo pipefail
+
+usage() {
+  printf 'usage: scripts/review-bundle <pr-number>\n' >&2
+  exit 2
+}
+[[ $# -eq 1 && "$1" =~ ^[1-9][0-9]{0,8}$ ]] || usage
+pr="$1"
+
+dir="$(mktemp -d "${TMPDIR:-/tmp}/review-bundle.XXXXXX")" || exit 1
+dir="$(cd -P "$dir" && pwd)" || exit 1
+chmod 700 "$dir"
+bundle="$dir/pr-$pr.md"
+fail() {
+  printf 'review-bundle: %s\n' "$1" >&2
+  rm -rf "$dir"
+  exit 1
+}
+
+diff="$(gh pr diff "$pr")" || fail "gh pr diff $pr failed"
+body="$(gh pr view "$pr" --json body --jq .body)" || fail "gh pr view $pr failed"
+oid="$(gh pr view "$pr" --json headRefOid --jq .headRefOid)" || fail "gh pr view $pr failed"
+files="$(gh pr view "$pr" --json files --jq '.files[].path')" || fail "gh pr view $pr failed"
+issue="$(printf '%s\n' "$body" | grep -Eio '(close[sd]?|fix(e[sd])?|resolve[sd]?) #[0-9]+' | head -n 1 | grep -Eo '[0-9]+$')"
+
+{
+  printf '# Review bundle for PR %s\n\n' "$pr"
+  printf '## Diff\n\n```diff\n%s\n```\n\n' "$diff"
+  printf '## Acceptance criteria\n\n'
+  if [[ -n "$issue" ]]; then
+    printf 'Issue #%s:\n\n' "$issue"
+    gh issue view "$issue" || printf '(could not read issue #%s)\n' "$issue"
+  else
+    printf '(the PR body has no "Closes #<issue>" line)\n'
+  fi
+  printf '\n## Touched files at the PR head (%s)\n' "$oid"
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    printf '\n### %s\n\n' "$path"
+    if [[ ! "$path" =~ ^[A-Za-z0-9._/@+-]+$ ]]; then
+      printf '(not fetched: unusual characters in the path)\n'
+    else
+      if content="$(gh api -H 'Accept: application/vnd.github.raw+json' \
+        "repos/{owner}/{repo}/contents/$path?ref=$oid" 2>/dev/null)"; then
+        printf '%s\n' "${content:0:200000}"
+      else
+        printf '(not available at the PR head, probably deleted)\n'
+      fi
+    fi
+  done <<<"$files"
+} >"$bundle" || fail "could not write $bundle"
+
+printf '%s\n' "$bundle"
