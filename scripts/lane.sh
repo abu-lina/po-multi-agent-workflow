@@ -94,11 +94,17 @@ PROMPT
 _agent_model_args() {
   local agent="$1" choice="$2"
   [[ -z "$choice" ]] && return 0
-  if [[ "$agent" == copilot || "$agent" == claude ]]; then
+  if [[ "$agent" == copilot ]]; then
     case "$choice" in
       none | minimal | low | medium | high | xhigh | max)
         agent_args+=(--reasoning-effort "$choice")
         ;;
+      *) agent_args+=(--model "$choice") ;;
+    esac
+  elif [[ "$agent" == claude ]]; then
+    # --reasoning-effort is not supported in Claude Code 2.1.x; skip effort levels silently
+    case "$choice" in
+      none | minimal | low | medium | high | xhigh | max) ;;
       *) agent_args+=(--model "$choice") ;;
     esac
   else
@@ -259,6 +265,10 @@ EOF
       '--deny-tool=shell(pass-cli:*)'
       '--deny-tool=write(.env.local)'
       '--deny-tool=shell(gh pr merge)')
+  elif [[ "$agent" == claude ]]; then
+    agent_args+=(
+      --allowed-tools 'Write,Bash(npm *),Bash(npx *),Bash(git *),Bash(gh issue *),Bash(gh pr create),Bash(gh pr checks),Bash(pwd *),Bash(ls *),Bash(cat *),Bash(head *),Bash(tail *),Bash(wc *),Bash(command -v *),Bash(which *),Bash(diff *),Bash(grep *),Bash(gh pr view *),Bash(gh pr diff *),Bash(gh run view *)'
+      --disallowed-tools 'Bash(git merge),Bash(git rebase),Bash(pass-cli *),Write(.env.local),Bash(gh pr merge)')
   else
     local git_common_dir config_dir config_file
     git_common_dir="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)" ||
