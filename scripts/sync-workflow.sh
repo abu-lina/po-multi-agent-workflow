@@ -16,6 +16,10 @@
 #   scripts/lane.sh
 #   scripts/review-bundle
 #   .devin/foreman.json
+#   .claude/settings.json
+#   .claude/hooks/fixed-proof-gate.sh
+#   .claude/hooks/post-write-check.sh
+#   .claude/hooks/on-stop-nudge.sh
 #
 # INIT-ONLY files are copied only on --init (never overwritten after that):
 #   docs/agents/review.md
@@ -41,6 +45,10 @@ SYNC_FILES=(
   scripts/lane.sh
   scripts/review-bundle
   .devin/foreman.json
+  .claude/settings.json
+  .claude/hooks/fixed-proof-gate.sh
+  .claude/hooks/post-write-check.sh
+  .claude/hooks/on-stop-nudge.sh
 )
 
 INIT_ONLY_FILES=(
@@ -72,7 +80,7 @@ copy_file() {
   cp "$src" "$dst"
   # Preserve executable bit for scripts
   case "$1" in
-    scripts/*) chmod +x "$dst" ;;
+    scripts/*|.claude/hooks/*) chmod +x "$dst" ;;
   esac
   echo "  updated $1"
 }
