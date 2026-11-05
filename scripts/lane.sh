@@ -79,7 +79,21 @@ _lane_type() {
 
 _lane_prompt() {
   local issue="$1"
-  printf 'You are a lane. Read AGENTS.md, then docs/agents/lane.md, then work on GitHub issue #%s. Start with step 0 of lane.md and stop at any "stop and ask" condition. Before stopping, update your Herdr workspace status to blocked or done so the owner is notified.' "$issue"
+  printf 'You are a lane. Read AGENTS.md, then docs/agents/lane.md, then work on GitHub issue #%s.
+
+AUTO-SKILLS — load these before writing any code, no exceptions:
+- mattpocock-skills:tdd — every feature lane, before the first test
+- supabase + supabase-postgres-best-practices — any DB, schema, or RLS work
+- self-improving-agent — after any command failure or owner correction
+
+REVIEW-SKILLS — run these on every PR before marking it ready:
+- impeccable — code quality pass
+- mattpocock-skills:code-review — standards + spec
+- security-audit — PRs touching auth, payments, or user data
+
+FALLBACK — if no skill above clearly covers a step: /using-agent-skills, then stop and ask the owner.
+
+Start with step 0 of lane.md and stop at any "stop and ask" condition. Before stopping, update your Herdr workspace status to blocked or done so the owner is notified.' "$issue"
 }
 
 _foreman_prompt() {
