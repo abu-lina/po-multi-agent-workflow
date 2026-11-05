@@ -2,8 +2,8 @@
 # Lane helpers for the foreman + crew workflow (docs/agents/foreman.md).
 # Source from ~/.zshrc:  source ~/your-project/scripts/lane.sh
 #
-#   lane <issue> [slug] [copilot|devin] [model|effort]
-#   foreman [copilot|devin] [model] start or focus the foreman
+#   lane <issue> [slug] [claude|copilot|devin] [model|effort]
+#   foreman [claude|copilot|devin] [model] start or focus the foreman
 #   lane_done <issue> [--force]           remove a merged lane
 #   lane_status                           one line per lane + stale workspaces
 #
@@ -93,7 +93,7 @@ REVIEW-SKILLS — run these on every PR before marking it ready:
 
 FALLBACK — if no skill above clearly covers a step: /using-agent-skills, then stop and ask the owner.
 
-Start with step 0 of lane.md and stop at any "stop and ask" condition. Before stopping, update your Herdr workspace status to blocked or done so the owner is notified.' "$issue"
+Start with step 0 of lane.md and stop at any "stop and ask" condition. Before stopping, comment on the issue and update your Herdr workspace status to blocked or done so the owner is notified.' "$issue"
 }
 
 _foreman_prompt() {
@@ -188,7 +188,9 @@ foreman() {
   pane="$(_herdr_root_pane "$tab_response")" ||
     { echo "Herdr did not return a root pane for the foreman tab" >&2; return 1; }
 
-  start_output="$(herdr agent start foreman --kind "$agent" --pane "$pane" -- "${agent_args[@]}" 2>&1)" ||
+  local -a no_remote_flag=()
+  [[ "$agent" == copilot ]] && no_remote_flag=(--no-remote)
+  start_output="$(herdr agent start foreman --kind "$agent" --pane "$pane" "${no_remote_flag[@]}" -- "${agent_args[@]}" 2>&1)" ||
     { printf 'could not start the foreman in pane %s: %s\n' "$pane" "$start_output" >&2; return 1; }
   herdr agent prompt foreman "$prompt"
 }
