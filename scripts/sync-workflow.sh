@@ -20,6 +20,7 @@
 #   .claude/hooks/fixed-proof-gate.sh
 #   .claude/hooks/post-write-check.sh
 #   .claude/hooks/on-stop-nudge.sh
+#   scripts/sync-workflow.sh
 #
 # INIT-ONLY files are copied only on --init (never overwritten after that):
 #   docs/agents/review.md
@@ -49,6 +50,7 @@ SYNC_FILES=(
   .claude/hooks/fixed-proof-gate.sh
   .claude/hooks/post-write-check.sh
   .claude/hooks/on-stop-nudge.sh
+  scripts/sync-workflow.sh
 )
 
 INIT_ONLY_FILES=(
