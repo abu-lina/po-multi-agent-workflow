@@ -25,7 +25,7 @@ Auto-trigger `grill-with-docs` whenever intent is detected (gap, problem, or des
 | Exploring approaches during shaping                             | `superpowers:brainstorming`                                        | Approach options before committing to a direction                               |
 | User-facing feature                                             | `pm-execution:job-stories`                                         | Job stories for issue body ACs                                                  |
 | Internal / infra change                                         | `pm-execution:write-stories`                                       | Dev-oriented stories for issue body ACs                                         |
-| P0/P1 issues or `area:auth` / `area:data`                       | `pm-execution:pre-mortem` + `pm-execution:test-scenarios`          | Risk analysis + scenario list — run before `gh issue create`                    |
+| P0/P1 issues or `area:auth` / `area:db`                         | `pm-execution:pre-mortem` + `pm-execution:test-scenarios`          | Risk analysis + scenario list — run before `gh issue create`                    |
 
 Skip shaping for confirmed bugs with a clear reproduction — go straight to lane start.
 
@@ -78,7 +78,7 @@ The foreman maps `area:*` labels to skill buckets and applies the corresponding 
 
 ### Frontend bucket
 
-**Labels:** `area:ui`, `area:map`, `area:dashboard`
+**Labels:** `area:ui`, `area:map`, `area:dashboard`, `area:providers`, `area:admin`
 
 | Mode      | Skills                                                                                                                                                       |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -87,7 +87,7 @@ The foreman maps `area:*` labels to skill buckets and applies the corresponding 
 
 ### Backend bucket
 
-**Labels:** `area:auth`, `area:search`, `area:db`, `area:imports`
+**Labels:** `area:auth`, `area:search`, `area:db`, `area:imports`, `area:providers`, `area:admin`
 
 | Mode      | Skills                                                                                                                                       |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -104,7 +104,7 @@ The foreman maps `area:*` labels to skill buckets and applies the corresponding 
 
 ### Dual-bucket labels
 
-`area:providers` and `area:admin` — apply both Frontend and Backend buckets.
+`area:providers` and `area:admin` appear in both Frontend and Backend buckets above — lanes with these labels apply both skill sets.
 
 ## Learning / TRAP flow (Stage 7)
 
