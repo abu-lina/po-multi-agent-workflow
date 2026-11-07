@@ -50,6 +50,8 @@ SYNC_FILES=(
   .claude/hooks/fixed-proof-gate.sh
   .claude/hooks/post-write-check.sh
   .claude/hooks/on-stop-nudge.sh
+  .claude/hooks/idea-detection-nudge.sh
+  .claude/hooks/review-dispatch-nudge.sh
   scripts/sync-workflow.sh
 )
 
