@@ -42,7 +42,7 @@ The foreman handles every mechanical step — from idea detection through auto-m
 
 **Skills:** `grill-with-docs` (= `grilling` + `mattpocock-skills:domain-modeling`), `superpowers:brainstorming`, `pm-execution:job-stories` or `pm-execution:write-stories`
 
-**Conditional (P0/P1 or area:auth/area:data):** `pm-execution:pre-mortem`, `pm-execution:test-scenarios`
+**Conditional (P0/P1 or area:auth/area:db):** `pm-execution:pre-mortem`, `pm-execution:test-scenarios`
 
 1. Auto-trigger `grill-with-docs` — relentless interview until frontier is empty.
 2. `superpowers:brainstorming` for exploring approaches during shaping.
@@ -53,7 +53,7 @@ The foreman handles every mechanical step — from idea detection through auto-m
    - User-facing features → `pm-execution:job-stories`
    - Internal/infra → `pm-execution:write-stories`
    - No PRD unless PO explicitly requests one
-5. For P0/P1 or area:auth/area:data: run `pm-execution:pre-mortem` + `pm-execution:test-scenarios` before issue creation.
+5. For P0/P1 or area:auth/area:db: run `pm-execution:pre-mortem` + `pm-execution:test-scenarios` before issue creation.
 6. Apply labels: `ready`, `P<n>`, `area:<x>`, `type:<x>`.
 7. `gh issue create` with final ACs in body.
 
@@ -129,7 +129,9 @@ If code review forces a fix:
 
 1. Open PR (draft if still fixing, ready when clean):
    ```bash
-   gh pr create --title "..." --body "Closes #<issue>\n\n<summary>" --draft
+   gh pr create --title "..." --body "Closes #<issue>
+
+<summary>" --draft
    ```
 2. Set auto-merge immediately:
    ```bash
