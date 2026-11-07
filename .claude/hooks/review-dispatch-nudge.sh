@@ -1,2 +1,3 @@
 #!/usr/bin/env bash
-printf 'FOREMAN GATE — CODE REVIEW: If the user just approved a checkpoint (sent a positive reply after localhost verification), you MUST dispatch ALL code review subagents in parallel before opening the PR: pm-ai-shipping:intended-vs-implemented, mattpocock-skills:code-review, security-audit, ponytail:ponytail-review. For Frontend/UI lanes also add: ui-taste, impeccable:impeccable-finish-reviewer. Do not skip this gate.\n'
+printf 'FOREMAN GATE — CODE REVIEW: If the user just approved a checkpoint (sent a positive reply after localhost verification), you MUST dispatch ALL code review subagents in parallel before opening the PR: pm-ai-shipping:intended-vs-implemented, mattpocock-skills:code-review, security-audit, pm-ai-shipping:security-audit-static, ponytail:ponytail-review. For Frontend/UI lanes also add: ui-taste, impeccable:impeccable-finish-reviewer. Do not skip this gate.
+'
