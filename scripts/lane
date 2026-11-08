@@ -24,8 +24,9 @@ case "$command" in
   status) lane_status "$@" ;;
   start) lane "$@" ;;
   done) lane_done "$@" ;;
+  register) lane_register "$@" ;;
   *)
-    printf 'usage: scripts/lane {status|start <issue> <slug> [claude|copilot|devin|opencode] [model]|done <issue> [--force]}\n' >&2
+    printf 'usage: scripts/lane {status|start <issue> <slug> [claude|copilot|devin|opencode] [model]|register <issue> <block_id>|done <issue> [--force]}\n' >&2
     exit 2
     ;;
 esac

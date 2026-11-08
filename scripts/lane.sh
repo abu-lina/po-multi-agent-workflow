@@ -219,6 +219,9 @@ lane() {
   cat >"$dir/.env.lane" <<EOF || { echo "could not write $dir/.env.lane" >&2; return 1; }
 PORT=$port
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:$port
+ISSUE=$issue
+REX_SESSION_ID=${REX_SESSION:-}
+FOREMAN_BLOCK=${REX_BLOCK:-}
 EOF
 
   if [[ -d "$root/node_modules" ]]; then
@@ -229,6 +232,18 @@ EOF
   _lane_setup_hooks "$root" "$dir" || { echo "could not copy git hooks into $dir" >&2; return 1; }
   printf 'lane #%s: %s on %s, port %s\n' "$issue" "$dir" "$branch" "$port"
   _lane_rex_cmd "$agent" "$model" "$dir"
+}
+
+lane_register() {
+  local issue="${1:-}" block_id="${2:-}"
+  [[ -z "$issue" || -z "$block_id" ]] && { echo "usage: lane_register <issue> <block_id>" >&2; return 1; }
+
+  local root dir
+  root="$(_lane_root)" || return 1
+  [[ "$root" == */.worktrees/* ]] && { echo "run lane register from the main checkout" >&2; return 1; }
+  dir="$(_lane_dir "$root" "$issue")"
+  [[ -n "$dir" ]] || { echo "no worktree for #$issue" >&2; return 1; }
+  printf 'LANE_BLOCK=%s\n' "$block_id" >> "$dir/.env.lane"
 }
 
 lane_done() {
@@ -243,6 +258,12 @@ lane_done() {
   branch="$(git -C "$dir" branch --show-current)"
   [[ -z "$branch" ]] && { printf 'worktree %s is detached; resolve manually\n' "$dir" >&2; return 1; }
   port="$(_lane_port "$issue")"
+
+  local lane_block="" rex_session_id=""
+  if [[ -f "$dir/.env.lane" ]]; then
+    lane_block="$(grep -m1 '^LANE_BLOCK=' "$dir/.env.lane" 2>/dev/null | cut -d= -f2-)" || true
+    rex_session_id="$(grep -m1 '^REX_SESSION_ID=' "$dir/.env.lane" 2>/dev/null | cut -d= -f2-)" || true
+  fi
 
   if [[ "$force" != "--force" ]]; then
     local state
@@ -269,6 +290,9 @@ lane_done() {
     cleanup_failed=1
   fi
   [[ "$cleanup_failed" == 0 ]] || return 1
+  if [[ -n "$lane_block" ]]; then
+    rex block close -s "$rex_session_id" "$lane_block" 2>/dev/null || true
+  fi
   echo "lane #$issue removed"
 }
 

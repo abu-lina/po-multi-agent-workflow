@@ -2,21 +2,14 @@
 # Bash tests for scripts/hooks/lane-signal-notify.sh
 # Run directly: bash tests/scripts/lane-signal-notify.test.sh
 
-set -euo pipefail
-
 HOOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/scripts/hooks/lane-signal-notify.sh"
 [[ -f "$HOOK" ]] || { echo "MISSING: $HOOK" >&2; exit 1; }
 
 PASS=0; FAIL=0
 
-t() {
-  local label="$1"; shift
-  if "$@" 2>/dev/null; then
-    echo "PASS: $label"; ((PASS++))
-  else
-    echo "FAIL: $label"; ((FAIL++))
-  fi
-}
+pass() { echo "PASS: $1"; PASS=$((PASS + 1)); }
+fail() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
+check() { local label="$1" ok="$2"; [[ "$ok" == "1" ]] && pass "$label" || fail "$label"; }
 
 # Build a fake rex (records args to rex.log) and a fake git (lets tests
 # override show-toplevel via $MOCK_TOPLEVEL without recursion).
@@ -43,47 +36,45 @@ export PATH="$tmpbin:$PATH"
 
 # ------------------------------------------------------------------
 
-_no_op_no_env_lane() {
-  local d; d="$(mktemp -d)"; trap 'rm -rf "$d"' RETURN
-  local before; before="$(wc -l < "$rex_log" 2>/dev/null || echo 0)"
-  MOCK_TOPLEVEL="$d/.worktrees/99-slug" bash "$HOOK" <<< ""
-  local after; after="$(wc -l < "$rex_log" 2>/dev/null || echo 0)"
-  [[ "$before" == "$after" ]]
-}
-t "no-op when .env.lane absent" _no_op_no_env_lane
+# Test 1: no-op when .env.lane absent
+d1="$(mktemp -d)"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d1/.worktrees/99-slug" bash "$HOOK" <<< ""
+check "no-op when .env.lane absent" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
+rm -rf "$d1"
 
-_no_op_no_signal() {
-  local d; d="$(mktemp -d)"; trap 'rm -rf "$d"' RETURN
-  printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d/.env.lane"
-  local before; before="$(wc -l < "$rex_log" 2>/dev/null || echo 0)"
-  MOCK_TOPLEVEL="$d/.worktrees/42-slug" bash "$HOOK" <<< ""
-  local after; after="$(wc -l < "$rex_log" 2>/dev/null || echo 0)"
-  [[ "$before" == "$after" ]]
-}
-t "no-op when .lane-signal absent" _no_op_no_signal
+# Test 2: no-op when .lane-signal absent
+d2="$(mktemp -d)"; mkdir -p "$d2/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d2/.worktrees/42-slug/.env.lane"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d2/.worktrees/42-slug" bash "$HOOK" <<< ""
+check "no-op when .lane-signal absent" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
+rm -rf "$d2"
 
-_signal_consumed_and_deleted() {
-  local d; d="$(mktemp -d)"; trap 'rm -rf "$d"' RETURN
-  printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d/.env.lane"
-  printf 'handoff: finished feature X' > "$d/.lane-signal"
-  rm -f "$rex_log"
-  MOCK_TOPLEVEL="$d/.worktrees/42-slug" bash "$HOOK" <<< ""
-  local got; got="$(cat "$rex_log" 2>/dev/null)"
-  [[ "$got" == "send -s ses1 -b blk1 Lane #42: handoff: finished feature X" ]] \
-    && [[ ! -f "$d/.lane-signal" ]]
-}
-t "signal consumed and file deleted" _signal_consumed_and_deleted
+# Test 3: signal consumed and file deleted
+d3="$(mktemp -d)"; mkdir -p "$d3/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d3/.worktrees/42-slug/.env.lane"
+printf 'handoff: finished feature X' > "$d3/.worktrees/42-slug/.lane-signal"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d3/.worktrees/42-slug" bash "$HOOK" <<< ""
+got_rex="$(cat "$rex_log" 2>/dev/null || echo "")"
+want_rex="send -s ses1 -b blk1 Lane #42: handoff: finished feature X"
+check "rex send called with correct args" "$([ "$got_rex" = "$want_rex" ] && echo 1 || echo 0)"
+check ".lane-signal deleted after delivery" "$([ ! -f "$d3/.worktrees/42-slug/.lane-signal" ] && echo 1 || echo 0)"
+rm -rf "$d3"
 
-_no_op_main_checkout() {
-  local d; d="$(mktemp -d)"; trap 'rm -rf "$d"' RETURN
-  printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d/.env.lane"
-  printf 'blocked: waiting for schema' > "$d/.lane-signal"
-  rm -f "$rex_log"
-  MOCK_TOPLEVEL="$d" bash "$HOOK" <<< ""
-  local rex_calls; rex_calls="$(cat "$rex_log" 2>/dev/null || echo "")"
-  [[ -z "$rex_calls" ]] && [[ -f "$d/.lane-signal" ]]
-}
-t "no-op in main checkout (no .worktrees/ in path)" _no_op_main_checkout
+# Test 4: no-op in main checkout (toplevel path has no .worktrees/)
+d4="$(mktemp -d)"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d4/.env.lane"
+printf 'blocked: waiting for schema' > "$d4/.lane-signal"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d4" bash "$HOOK" <<< ""
+rex_calls="$(cat "$rex_log" 2>/dev/null || echo "")"
+check "no-op in main checkout: rex not called" "$([ -z "$rex_calls" ] && echo 1 || echo 0)"
+check "no-op in main checkout: .lane-signal preserved" "$([ -f "$d4/.lane-signal" ] && echo 1 || echo 0)"
+rm -rf "$d4"
+
+# ------------------------------------------------------------------
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

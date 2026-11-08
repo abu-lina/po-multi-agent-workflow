@@ -49,6 +49,8 @@ Target 100k tokens per session. Read the issue, then the files it names, then th
 - you'd need to touch another `area:*` than the issue's
 - anything would be destructive (delete branch, remove worktree, reset)
 
+Write `.lane-signal blocked: <reason>` before stopping, so the Stop hook notifies the foreman automatically.
+
 Ask by commenting on the issue or PR, then end your turn. Don't guess.
 
 ## Project essentials
