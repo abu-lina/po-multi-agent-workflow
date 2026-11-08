@@ -2,10 +2,9 @@
 # Lane helpers for the foreman + crew workflow (docs/agents/foreman.md).
 # Source from ~/.zshrc:  source ~/your-project/scripts/lane.sh
 #
-#   lane <issue> [slug] [claude|copilot|devin] [model|effort]
-#   foreman [claude|copilot|devin] [model] start or focus the foreman
+#   lane <issue> [slug] [claude|copilot|devin|opencode] [model|effort]
 #   lane_done <issue> [--force]           remove a merged lane
-#   lane_status                           one line per lane + stale workspaces
+#   lane_status                           one line per lane: branch + PR state + CI
 #
 # Sourced by zsh, this file defines only thin wrappers that run scripts/lane,
 # so all logic runs under bash. scripts/lane sources it under bash for the
@@ -17,7 +16,6 @@ if [ -n "${ZSH_VERSION:-}" ]; then
   function lane { "$_lane_wrapper_bin" start "$@"; }
   function lane_done { "$_lane_wrapper_bin" 'done' "$@"; }
   function lane_status { "$_lane_wrapper_bin" status "$@"; }
-  function foreman { "$_lane_wrapper_bin" foreman "$@"; }
   return 0
 fi
 
@@ -93,123 +91,109 @@ REVIEW-SKILLS — run these on every PR before marking it ready:
 
 FALLBACK — if no skill above clearly covers a step: /using-agent-skills, then stop and ask the owner.
 
-Start with step 0 of lane.md and stop at any "stop and ask" condition. Before stopping, comment on the issue and update your Herdr workspace status to blocked or done so the owner is notified.' "$issue"
+Start with step 0 of lane.md and stop at any "stop and ask" condition. Before stopping, comment on the issue so the foreman is notified.' "$issue"
 }
 
-_foreman_prompt() {
-  cat <<'PROMPT'
-You are the foreman. Read AGENTS.md, then docs/agents/foreman.md. Never write code. Propose lanes and wait for approval from the owner before starting them.
+# Print the rex split command to open a lane pane for the given agent.
+# Side effect for devin: writes a temp sandbox config and prints its path in the command.
+_lane_rex_cmd() {
+  local agent="$1" model="${2:-}" dir="$3"
+  local root agent_cmd model_flag=""
 
-Use the Herdr skill included below instead of discovering commands with --help. Watch running lanes with `herdr agent wait <lane> --until blocked --until done`, then report when a lane needs the owner.
-PROMPT
-  HERDR_ENV=1 herdr --skill
-}
-
-_agent_model_args() {
-  local agent="$1" choice="$2"
-  [[ -z "$choice" ]] && return 0
-  if [[ "$agent" == copilot ]]; then
-    case "$choice" in
-      none | minimal | low | medium | high | xhigh | max)
-        agent_args+=(--reasoning-effort "$choice")
-        ;;
-      *) agent_args+=(--model "$choice") ;;
-    esac
-  elif [[ "$agent" == claude ]]; then
-    # --reasoning-effort is not supported in Claude Code 2.1.x; skip effort levels silently
-    case "$choice" in
-      none | minimal | low | medium | high | xhigh | max) ;;
-      *) agent_args+=(--model "$choice") ;;
-    esac
-  else
-    agent_args+=(--model "$choice")
-  fi
-}
-
-_herdr_root_pane() {
-  local pane
-  pane="$(printf '%s\n' "$1" | jq -r '.result.root_pane.pane_id // empty')" || return 1
-  [[ -n "$pane" ]] || return 1
-  printf '%s\n' "$pane"
-}
-
-_herdr_workspace_id() {
-  local json="$1" checkout_path="$2"
-  printf '%s\n' "$json" |
-    jq -r --arg checkout_path "$checkout_path" \
-      '[.result.workspaces[]? | select(.worktree.checkout_path == $checkout_path) | .workspace_id] | first // empty'
-}
-
-_herdr_workspace_for_issue() {
-  local json="$1" issue="$2"
-  printf '%s\n' "$json" |
-    jq -r --arg issue "$issue" '
-      [.result.workspaces[]? | select((.worktree.checkout_path // "") |
-        contains("/.worktrees/" + $issue + "-"))] | first // {} |
-      [(.workspace_id // ""), (.worktree.checkout_path // ""),
-        (.branch // "")] | @tsv
-    '
-}
-
-foreman() {
-  local agent="${1:-devin}" model="${2:-}" root get_output tab_response pane start_output prompt config_dir
-  local -a agent_args
-  agent_args=()
-  [[ "$agent" == copilot || "$agent" == devin || "$agent" == claude ]] || { echo "agent must be copilot, devin, or claude" >&2; return 1; }
-  [[ "$agent" == devin && -z "$model" ]] && model="claude-opus-5-5-high"
-
-  root="$(_lane_root)" || { echo "not inside a git repo" >&2; return 1; }
-  [[ "$root" == */.worktrees/* ]] && { echo "run foreman from the main checkout, not a worktree" >&2; return 1; }
-
-  # Herdr can list a name for a dead agent, so ask for the agent itself: agent_not_found means no live foreman.
-  if get_output="$(herdr agent get foreman 2>&1)"; then
-    herdr agent focus foreman
-    return $?
-  fi
-  [[ "$(printf '%s\n' "$get_output" | jq -r '.error.code // empty' 2>/dev/null)" == agent_not_found ]] ||
-    { printf 'could not check for a running foreman: %s\n' "$get_output" >&2; return 1; }
-  [[ -n "${HERDR_WORKSPACE_ID:-}" ]] || { echo "HERDR_WORKSPACE_ID is not set; run foreman inside Herdr" >&2; return 1; }
-
-  _agent_model_args "$agent" "$model" || return 1
-  if [[ "$agent" == devin ]]; then
-    # Normal mode plus foreman.json rules: read-only commands run without prompts, writes are denied.
-    # Devin saves session state (org_id, model, "always allow" grants) into its --config file,
-    # so it gets a private copy and the committed rules stay untouched.
-    config_dir="$(mktemp -d "${TMPDIR:-/tmp}/foreman-config.XXXXXX")" || return 1
-    (umask 077 && cp "$root/.devin/foreman.json" "$config_dir/foreman.json" && chmod 600 "$config_dir/foreman.json") ||
-      { echo "could not copy $root/.devin/foreman.json" >&2; return 1; }
-    agent_args+=(--config "$config_dir/foreman.json")
-  fi
-  prompt="$(_foreman_prompt)" || { echo "could not load the Herdr skill" >&2; return 1; }
-
-  # The caller's pane is busy running this function, so the agent gets a fresh tab's root pane.
-  tab_response="$(herdr tab create --workspace "$HERDR_WORKSPACE_ID" --cwd "$root" --label foreman --focus 2>&1)" ||
-    { printf 'could not create the foreman tab: %s\n' "$tab_response" >&2; return 1; }
-  pane="$(_herdr_root_pane "$tab_response")" ||
-    { echo "Herdr did not return a root pane for the foreman tab" >&2; return 1; }
-
-  start_output="$(herdr agent start foreman --kind "$agent" --pane "$pane" -- "${agent_args[@]}" 2>&1)" ||
-    { printf 'could not start the foreman in pane %s: %s\n' "$pane" "$start_output" >&2; return 1; }
-  herdr agent prompt foreman "$prompt"
+  case "$agent" in
+    claude)
+      [[ -n "$model" ]] && model_flag=" --model $model"
+      printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %s && claude%s"\n' "$dir" "$model_flag"
+      ;;
+    copilot)
+      local -a flags=(
+        --allow-tool=write
+        '--allow-tool=shell(npm:*)'
+        '--allow-tool=shell(npx:*)'
+        '--allow-tool=shell(git:*)'
+        '--allow-tool=shell(gh issue:*)'
+        '--allow-tool=shell(gh pr create)'
+        '--allow-tool=shell(gh pr checks)'
+        '--allow-tool=shell(pwd:*)'
+        '--allow-tool=shell(ls:*)'
+        '--allow-tool=shell(cat:*)'
+        '--allow-tool=shell(head:*)'
+        '--allow-tool=shell(tail:*)'
+        '--allow-tool=shell(wc:*)'
+        '--allow-tool=shell(command -v:*)'
+        '--allow-tool=shell(which:*)'
+        '--allow-tool=shell(diff:*)'
+        '--allow-tool=shell(grep:*)'
+        '--allow-tool=shell(gh pr view:*)'
+        '--allow-tool=shell(gh pr diff:*)'
+        '--allow-tool=shell(gh run view:*)'
+        '--deny-tool=shell(git merge)'
+        '--deny-tool=shell(git rebase)'
+        '--deny-tool=shell(pass-cli:*)'
+        '--deny-tool=write(.env.local)'
+        '--deny-tool=shell(gh pr merge)'
+      )
+      if [[ -n "$model" ]]; then
+        case "$model" in
+          none|minimal|low|medium|high|xhigh|max) flags+=(--reasoning-effort "$model") ;;
+          *) flags+=(--model "$model") ;;
+        esac
+      fi
+      printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %s && copilot %s"\n' \
+        "$dir" "${flags[*]}"
+      ;;
+    devin)
+      root="$(git rev-parse --show-toplevel)" || return 1
+      local git_common_dir config_dir config_file
+      git_common_dir="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)" ||
+        { echo "could not resolve the repository's git common directory" >&2; return 1; }
+      config_dir="$(mktemp -d "${TMPDIR:-/tmp}/lane-config.XXXXXX")" || return 1
+      config_file="$config_dir/lane.json"
+      (umask 077 && jq -n --arg git_common_dir "$git_common_dir" '{
+        "permissions": {
+          "allow": ["Write(\($git_common_dir))"]
+        },
+        "sandbox": {
+          "excluded": {
+            "allow": [
+              "Exec(gh issue comment)",
+              "Exec(gh pr create --draft)",
+              "Exec(gh pr checks)",
+              "Exec(gh pr view)"
+            ]
+          }
+        }
+      }' > "$config_file") ||
+        { echo "could not write Devin lane sandbox config" >&2; return 1; }
+      local -a flags=(--permission-mode accept-edits --sandbox --config "$config_file")
+      [[ -n "$model" ]] && flags+=(--model "$model")
+      printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %s && devin %s"\n' \
+        "$dir" "${flags[*]}"
+      ;;
+    opencode)
+      # shortcut: opencode CLI flags TBD; update once opencode CLI stabilises
+      [[ -n "$model" ]] && model_flag=" --model $model"
+      printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %s && opencode%s"\n' "$dir" "$model_flag"
+      ;;
+  esac
 }
 
 lane() {
-  local issue="${1:-}" slug="${2:-}" agent="${3:-copilot}" model="${4:-}"
-  [[ -z "$issue" ]] && { echo "usage: lane <issue> [slug] [copilot|devin] [model|effort]" >&2; return 1; }
-  [[ "$agent" == copilot || "$agent" == devin || "$agent" == claude ]] || { echo "agent must be copilot, devin, or claude" >&2; return 1; }
+  local issue="${1:-}" slug="${2:-}" agent="${3:-claude}" model="${4:-}"
+  [[ -z "$issue" ]] && { echo "usage: lane <issue> [slug] [claude|copilot|devin|opencode] [model|effort]" >&2; return 1; }
+  [[ "$agent" == claude || "$agent" == copilot || "$agent" == devin || "$agent" == opencode ]] ||
+    { echo "agent must be claude, copilot, devin, or opencode" >&2; return 1; }
 
-  local root dir branch port workspace_json workspace_id worktree_result pane prompt base
-  local -a agent_args
+  local root dir branch port base
   root="$(_lane_root)" || { echo "not inside a git repo" >&2; return 1; }
   [[ "$root" == */.worktrees/* ]] && { echo "run lane from the main checkout, not a worktree" >&2; return 1; }
   dir="$(_lane_dir "$root" "$issue")"
 
   if [[ -n "$dir" ]]; then
-    workspace_json="$(herdr workspace list)" || return 1
-    workspace_id="$(_herdr_workspace_id "$workspace_json" "$dir")"
-    [[ -n "$workspace_id" ]] || { echo "no Herdr workspace found for $dir" >&2; return 1; }
-    herdr workspace focus "$workspace_id"
-    return $?
+    branch="$(git -C "$dir" branch --show-current)"
+    printf 'lane #%s: %s on %s\n' "$issue" "$dir" "$branch"
+    _lane_rex_cmd "$agent" "$model" "$dir"
+    return 0
   fi
 
   [[ -z "$slug" ]] && { echo "new lane needs a slug: lane $issue <slug>" >&2; return 1; }
@@ -221,18 +205,9 @@ lane() {
     gh issue develop "$issue" --name "$branch" --base main >/dev/null || return 1
   fi
   git fetch -q origin "$branch" || return 1
+  git worktree add "$dir" "$branch" || return 1
 
-  worktree_result="$(herdr worktree create \
-    --cwd "$root" \
-    --branch "$branch" \
-    --base "$base" \
-    --path "$dir" \
-    --label "#$issue $slug" \
-    --focus)" || return 1
-  pane="$(_herdr_root_pane "$worktree_result")" ||
-    { echo "Herdr did not return the new worktree's root pane" >&2; return 1; }
-
-  # A branch created from origin/main tracks it; point it at the lane's own remote branch.
+  # Branch created from origin/main tracks it; point at the lane's own remote branch.
   git -C "$dir" branch --set-upstream-to="origin/$branch" "$branch" >/dev/null ||
     { echo "could not set upstream of $branch to origin/$branch" >&2; return 1; }
 
@@ -248,139 +223,31 @@ EOF
       { echo "could not clone node_modules into $dir" >&2; return 1; }
   fi
   _lane_setup_hooks "$root" "$dir" || { echo "could not copy git hooks into $dir" >&2; return 1; }
-  echo "lane #$issue: $dir on $branch, port $port"
-
-  agent_args=()
-  _agent_model_args "$agent" "$model" || return 1
-  if [[ "$agent" == copilot ]]; then
-    agent_args+=(
-      --allow-tool=write
-      '--allow-tool=shell(npm:*)'
-      '--allow-tool=shell(npx:*)'
-      '--allow-tool=shell(git:*)'
-      '--allow-tool=shell(gh issue:*)'
-      '--allow-tool=shell(gh pr create)'
-      '--allow-tool=shell(gh pr checks)'
-      '--allow-tool=shell(pwd:*)'
-      '--allow-tool=shell(ls:*)'
-      '--allow-tool=shell(cat:*)'
-      '--allow-tool=shell(head:*)'
-      '--allow-tool=shell(tail:*)'
-      '--allow-tool=shell(wc:*)'
-      '--allow-tool=shell(command -v:*)'
-      '--allow-tool=shell(which:*)'
-      '--allow-tool=shell(diff:*)'
-      '--allow-tool=shell(grep:*)'
-      '--allow-tool=shell(gh pr view:*)'
-      '--allow-tool=shell(gh pr diff:*)'
-      '--allow-tool=shell(gh run view:*)'
-      '--deny-tool=shell(git merge)'
-      '--deny-tool=shell(git rebase)'
-      '--deny-tool=shell(pass-cli:*)'
-      '--deny-tool=write(.env.local)'
-      '--deny-tool=shell(gh pr merge)')
-  elif [[ "$agent" == claude ]]; then
-    agent_args+=(
-      --allowed-tools 'Write,Bash(npm *),Bash(npx *),Bash(git *),Bash(gh issue *),Bash(gh pr create),Bash(gh pr checks),Bash(pwd *),Bash(ls *),Bash(cat *),Bash(head *),Bash(tail *),Bash(wc *),Bash(command -v *),Bash(which *),Bash(diff *),Bash(grep *),Bash(gh pr view *),Bash(gh pr diff *),Bash(gh run view *)'
-      --disallowed-tools 'Bash(git merge),Bash(git rebase),Bash(pass-cli *),Write(.env.local),Bash(gh pr merge)')
-  else
-    local git_common_dir config_dir config_file
-    git_common_dir="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)" ||
-      { echo "could not resolve the repository's git common directory" >&2; return 1; }
-    config_dir="$(mktemp -d "${TMPDIR:-/tmp}/lane-config.XXXXXX")" || return 1
-    config_file="$config_dir/lane.json"
-    (umask 077 && jq -n --arg git_common_dir "$git_common_dir" '{
-      "permissions": {
-        "allow": ["Write(\($git_common_dir))"]
-      },
-      "sandbox": {
-        "excluded": {
-          "allow": [
-            "Exec(gh issue comment)",
-            "Exec(gh pr create --draft)",
-            "Exec(gh pr checks)",
-            "Exec(gh pr view)"
-          ]
-        }
-      }
-    }' > "$config_file") ||
-      { echo "could not write Devin lane sandbox config" >&2; return 1; }
-    agent_args+=(--permission-mode accept-edits --sandbox --config "$config_file")
-  fi
-
-  herdr agent start "lane-$issue" --kind "$agent" --pane "$pane" -- "${agent_args[@]}" || return 1
-  prompt="$(_lane_prompt "$issue")"
-  _lane_send_prompt "lane-$issue" "$pane" "$prompt"
-}
-
-# `agent start` can report ready while the agent is still printing login lines, so the first
-# prompt may land in the shell. --wait reports agent_prompt_stalled when the agent never
-# starts working; wait for it to settle, then re-send once.
-_lane_send_prompt() {
-  local name="$1" pane="$2" prompt="$3" output
-  local -a prompt_args=(--wait --until working --until blocked --until 'done')
-  output="$(herdr agent prompt "$name" "$prompt" "${prompt_args[@]}" 2>&1)" && return 0
-  if [[ "$(printf '%s\n' "$output" | jq -r '.error.code // empty' 2>/dev/null)" != agent_prompt_stalled ]]; then
-    printf 'could not send the prompt to %s (pane %s): %s\n' "$name" "$pane" "$output" >&2
-    return 1
-  fi
-  herdr agent wait "$name" --until idle --timeout 60000 >/dev/null 2>&1 || true
-  output="$(herdr agent prompt "$name" "$prompt" "${prompt_args[@]}" 2>&1)" && return 0
-  printf '%s did not start working after the prompt was re-sent (pane %s): %s\n' "$name" "$pane" "$output" >&2
-  return 1
+  printf 'lane #%s: %s on %s, port %s\n' "$issue" "$dir" "$branch" "$port"
+  _lane_rex_cmd "$agent" "$model" "$dir"
 }
 
 lane_done() {
   local issue="${1:-}" force="${2:-}"
   [[ -z "$issue" ]] && { echo "usage: lane_done <issue> [--force]" >&2; return 1; }
 
-  local root dir branch port workspace_json workspace_id workspace_record stale_dir stale_branch cleanup_failed=0
+  local root dir branch port cleanup_failed=0
   root="$(_lane_root)" || return 1
   [[ "$root" == */.worktrees/* ]] && { echo "run lane_done from the main checkout" >&2; return 1; }
   dir="$(_lane_dir "$root" "$issue")"
-  workspace_json="$(herdr workspace list)" || return 1
-  if [[ -z "$dir" ]]; then
-    workspace_record="$(_herdr_workspace_for_issue "$workspace_json" "$issue")"
-    IFS=$'\t' read -r workspace_id stale_dir stale_branch <<<"$workspace_record"
-    [[ -n "$workspace_id" ]] || { echo "no worktree or Herdr workspace for #$issue"; return 0; }
-    dir="$stale_dir"
-    branch="$stale_branch"
-    if [[ -z "$branch" ]]; then
-      local branches
-      branches="$(git branch --format='%(refname:short)' | awk -v marker="/$issue-" 'index($0, marker) > 0')"
-      [[ -n "$branches" && "$branches" != *$'\n'* ]] || {
-        echo "cannot determine a unique branch for stale workspace #$issue" >&2
-        return 1
-      }
-      branch="$branches"
-    fi
-  else
-    branch="$(git -C "$dir" branch --show-current)"
-    workspace_id="$(_herdr_workspace_id "$workspace_json" "$dir")"
-  fi
+  [[ -n "$dir" ]] || { echo "no worktree for #$issue"; return 0; }
+  branch="$(git -C "$dir" branch --show-current)"
   port="$(_lane_port "$issue")"
 
   if [[ "$force" != "--force" ]]; then
     local state
     state="$(gh pr view "$branch" --json state --jq .state 2>/dev/null)"
     [[ "$state" != "MERGED" ]] && { echo "PR for $branch is '${state:-missing}', not MERGED. Use --force only after the owner agrees." >&2; return 1; }
-    if [[ -d "$dir" ]]; then
-      [[ -n "$(git -C "$dir" status --porcelain)" ]] && { echo "$dir has uncommitted changes" >&2; return 1; }
-    fi
+    [[ -n "$(git -C "$dir" status --porcelain)" ]] && { echo "$dir has uncommitted changes" >&2; return 1; }
     if git -C "$root" rev-parse --verify -q "origin/$branch" >/dev/null; then
       [[ -n "$(git -C "$root" log "origin/$branch..$branch" --oneline)" ]] && { echo "$dir has unpushed commits" >&2; return 1; }
     fi
     lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && { echo "a process still listens on :$port" >&2; return 1; }
-  fi
-
-  if [[ -n "$workspace_id" ]]; then
-    if ! herdr worktree remove --workspace "$workspace_id" --force; then
-      echo "Herdr could not remove $dir; closing its workspace and completing local cleanup" >&2
-      if ! herdr workspace close "$workspace_id"; then
-        echo "could not close Herdr workspace $workspace_id" >&2
-        cleanup_failed=1
-      fi
-    fi
   fi
 
   # Git's force option removes ignored build output such as .next and node_modules.
@@ -401,46 +268,41 @@ lane_done() {
 }
 
 lane_status() {
-  local agents workspaces lane_rows workspace_rows name agent_status label branch checkout_path workspace_id
-  agents="$(herdr agent list)" || return 1
-  workspaces="$(herdr workspace list)" || return 1
+  local root worktrees worktree branch pr_info pr_state ci_status
+  root="$(_lane_root)" || { echo "not inside a git repo" >&2; return 1; }
 
-  lane_rows="$(printf '%s\n' "$agents" | jq -r --argjson workspace_data "$workspaces" '
-    (.result.agents // []) |
-    map(select((.name // "") | startswith("lane-")))[] |
-    . as $agent |
-    ([$workspace_data.result.workspaces[]? |
-      select(.workspace_id == $agent.workspace_id)] | first // {}) as $workspace |
-    [
-      $agent.name,
-      ($agent.agent_status // "unknown"),
-      ($workspace.label // "-"),
-      ($agent.branch // $workspace.branch // "-"),
-      ($workspace.worktree.checkout_path // $agent.cwd // "")
-    ] | @tsv
-  ')" || return 1
+  printf 'WORKTREE\tBRANCH\tPR\tCI\n'
+  worktrees="$(git worktree list --porcelain 2>/dev/null)" || return 1
 
-  printf 'AGENT\tSTATUS\tWORKSPACE LABEL\tBRANCH\n'
-  if [[ -z "$lane_rows" ]]; then
-    printf 'No lanes open.\n'
-  else
-    while IFS=$'\t' read -r name agent_status label branch checkout_path; do
-      if [[ "$branch" == "-" && -n "$checkout_path" && -d "$checkout_path" ]]; then
-        branch="$(git -C "$checkout_path" branch --show-current)"
-      fi
-      printf '%s\t%s\t%s\t%s\n' "$name" "$agent_status" "$label" "$branch"
-    done <<<"$lane_rows"
-  fi
-
-  workspace_rows="$(printf '%s\n' "$workspaces" | jq -r '
-    .result.workspaces[]? |
-    [(.workspace_id // ""), (.label // ""), (.worktree.checkout_path // "")] |
-    @tsv
-  ')" || return 1
-  while IFS=$'\t' read -r workspace_id label checkout_path; do
-    if [[ -n "$checkout_path" && ! -e "$checkout_path" ]]; then
-      printf 'STALE WORKSPACE\t%s\t%s\tcheckout path does not exist: %s\n' "$workspace_id" "$label" "$checkout_path"
-    fi
-  done <<<"$workspace_rows"
-  return 0
+  worktree="" branch=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      worktree\ *)
+        worktree="${line#worktree }"
+        branch=""
+        ;;
+      branch\ refs/heads/*)
+        branch="${line#branch refs/heads/}"
+        ;;
+      "")
+        if [[ "$worktree" == */.worktrees/* ]]; then
+          pr_info="$(gh pr view "$branch" --json state,statusCheckRollup 2>/dev/null)"
+          if [[ -n "$pr_info" ]]; then
+            pr_state="$(printf '%s\n' "$pr_info" | jq -r '.state // "none"')"
+            ci_status="$(printf '%s\n' "$pr_info" | jq -r '
+              [.statusCheckRollup[]? | .conclusion // .status] |
+              if length == 0 then "none"
+              elif all(. == "SUCCESS") then "pass"
+              elif any(. == "FAILURE") then "fail"
+              else "pending" end')"
+          else
+            pr_state="none"
+            ci_status="-"
+          fi
+          printf '%s\t%s\t%s\t%s\n' "$worktree" "$branch" "$pr_state" "$ci_status"
+        fi
+        worktree="" branch=""
+        ;;
+    esac
+  done <<<"$worktrees"
 }
