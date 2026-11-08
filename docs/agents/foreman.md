@@ -103,6 +103,14 @@ The lane runs independently:
 
 **Foreman during implementation:** watch all active panes via Rex for block signals. Never interrupt a lane that is running cleanly.
 
+> **HARD GATE — foreman never edits worktree files:** When a lane is silent, slow, or stuck, the foreman's ONLY permitted responses are:
+> 1. `SendMessage` to probe the lane.
+> 2. Escalate to the PO if the lane is unresponsive.
+>
+> The foreman MUST NOT edit, create, or delete any file inside `.worktrees/<issue>-<slug>/`, regardless of how small the fix appears. This includes quick bug fixes, seed data, design system corrections, and config changes. All such work goes to the lane via `SendMessage`. Doing it directly creates ghost commits not owned by the lane, violates the lane/foreman split, and sets a precedent that breaks the entire workflow.
+>
+> *Incident 2026-11-08 (#874):* foreman directly fixed a PostgREST bug, rewrote a component for design system alignment, and seeded test data — all should have gone to the lane via `SendMessage`.
+
 ## Stage 4 — Checkpoint
 
 **Triggered by:** Handoff signal from lane.
