@@ -59,6 +59,8 @@ The foreman handles every mechanical step — from idea detection through auto-m
 
 ## Stage 2 — Lane start
 
+**No direct edits.** The foreman never edits files directly. All implementation — including doc fixes and chores — goes through `scripts/lane start <issue> <slug>` first. File reads for triage or status are fine.
+
 **Skills:** `mattpocock-skills:writing-for-agents`, `superpowers:writing-plans` (conditional)
 
 1. Run `mattpocock-skills:writing-for-agents` → produces the Lane Brief from the grilled spec + user stories.
