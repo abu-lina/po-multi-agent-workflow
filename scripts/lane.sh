@@ -188,9 +188,7 @@ foreman() {
   pane="$(_herdr_root_pane "$tab_response")" ||
     { echo "Herdr did not return a root pane for the foreman tab" >&2; return 1; }
 
-  local -a no_remote_flag=()
-  [[ "$agent" == copilot ]] && no_remote_flag=(--no-remote)
-  start_output="$(herdr agent start foreman --kind "$agent" --pane "$pane" "${no_remote_flag[@]}" -- "${agent_args[@]}" 2>&1)" ||
+  start_output="$(herdr agent start foreman --kind "$agent" --pane "$pane" -- "${agent_args[@]}" 2>&1)" ||
     { printf 'could not start the foreman in pane %s: %s\n' "$pane" "$start_output" >&2; return 1; }
   herdr agent prompt foreman "$prompt"
 }
