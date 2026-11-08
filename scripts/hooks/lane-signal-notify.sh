@@ -20,4 +20,5 @@ FOREMAN_BLOCK="$(_get_env FOREMAN_BLOCK "$root/.env.lane")"
 
 signal="$(tr -dc '[:print:][:space:]' < "$root/.lane-signal")"
 rex send -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" "Lane #$ISSUE: $signal" 2>/dev/null &&
+  rex send-key -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" enter 2>/dev/null &&
   rm -f "$root/.lane-signal"
