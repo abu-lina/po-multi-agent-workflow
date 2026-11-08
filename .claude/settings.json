@@ -1,4 +1,38 @@
 {
+  "permissions": {
+    "allow": [
+      "Write",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(git *)",
+      "Bash(gh issue *)",
+      "Bash(gh pr create)",
+      "Bash(gh pr checks)",
+      "Bash(pwd *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(command -v *)",
+      "Bash(which *)",
+      "Bash(diff *)",
+      "Bash(grep *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh run view *)"
+    ],
+    "deny": [
+      "Bash(git merge)",
+      "Bash(git rebase)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git config --global*)",
+      "Bash(pass-cli *)",
+      "Write(.env.local)",
+      "Bash(gh pr merge)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {

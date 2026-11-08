@@ -65,14 +65,18 @@ The foreman handles every mechanical step — from idea detection through auto-m
 
 1. Run `mattpocock-skills:writing-for-agents` → produces the Lane Brief from the grilled spec + user stories.
 2. **Conditional** (complex issues: schema changes, new subsystems, multi-domain, P0/P1): run `superpowers:writing-plans` to produce a step-by-step implementation plan before the lane starts.
-3. Create worktree and branch:
+3. Pick agent and tier, then propose to the PO:
+   - **Strong** (`claude`, `copilot`, or `devin`): 6+ ACs, security/data-sensitive, cross-cutting refactor, expected diff > 200 non-test lines. Default to `claude`.
+   - **Cheap** (`opencode`): everything else — config, scripts, docs, 5 or fewer ACs.
+
+   Propose in chat: "Starting lane #`<issue>` with `<agent>`. `<one-line reason>`. OK to proceed?"
+   Wait for explicit PO approval before continuing.
+
+4. Run `lane start` and paste the printed Rex command:
    ```bash
-   scripts/lane start <issue> <slug>
+   scripts/lane start <issue> <slug> [agent]
    ```
-4. Open worker pane via Rex:
-   ```bash
-   rex split -s "$REX_SESSION" --split=right -- bash -c "cd .worktrees/<issue>-<slug> && claude"
-   ```
+   The command prints a `rex split ...` command. Paste it into the terminal to open the lane pane.
 5. Pass the Lane Brief as the lane's opening prompt.
 6. Stay as foreman. Never write code or edit source in this session.
 
