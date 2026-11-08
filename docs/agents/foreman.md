@@ -77,8 +77,13 @@ The foreman handles every mechanical step — from idea detection through auto-m
    scripts/lane start <issue> <slug> [agent]
    ```
    The command prints a `rex split ...` command. Paste it into the terminal to open the lane pane.
-5. Pass the Lane Brief as the lane's opening prompt.
-6. Stay as foreman. Never write code or edit source in this session.
+5. After `rex split` returns a block ID, register it with the lane:
+   ```bash
+   scripts/lane register <issue> <block_id>
+   ```
+   This appends `LANE_BLOCK=<block_id>` to the lane's `.env.lane`, so `lane done` can close the lane's pane when finished.
+6. Pass the Lane Brief as the lane's opening prompt.
+7. Stay as foreman. Never write code or edit source in this session.
 
 ## Stage 3 — Active implementation
 
@@ -90,7 +95,7 @@ The lane runs independently:
 1. Reads Lane Brief + plan → starts TDD cycle (Red → Green → Refactor → Verify).
 2. `self-improving-agent` runs automatically, capturing errors and learnings to `.learnings/LEARNINGS.md` and `ERRORS.md`.
 3. If a stop condition is hit (schema change needed, missing AC, test outside diff): lane stops and fires a block signal.
-4. Foreman monitors all active Rex panes for block signals. On block: reads reason, escalates to PO, relays resolution back to lane.
+4. When a lane hits a stop condition or completes handoff, the Stop hook delivers the signal automatically to this foreman pane. On block: read the reason, escalate to PO, relay resolution back to lane.
 5. When complete: lane runs `superpowers:finishing-a-development-branch` + `superpowers:verification-before-completion` (type-check, lint, vitest, build).
 6. Lane fires `handoff` skill → structured signal to foreman.
 

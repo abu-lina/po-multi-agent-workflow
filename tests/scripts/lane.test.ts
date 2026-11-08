@@ -53,3 +53,42 @@ test('lane start: errors when run from a worktree', () => {
   expect(r.stderr?.trim()).toBe('run lane from the main checkout, not a worktree')
   expect(r.status).toBe(1)
 })
+
+test('lane register: errors with no args', () => {
+  const { stderr, status } = runLane(['register'])
+  expect(stderr).toContain('usage: lane_register')
+  expect(status).toBe(1)
+})
+
+test('lane register: errors with only issue arg', () => {
+  const { stderr, status } = runLane(['register', '42'])
+  expect(stderr).toContain('usage: lane_register')
+  expect(status).toBe(1)
+})
+
+test('lane register: errors when run from a worktree', () => {
+  const r = spawnSync('bash', [LANE, 'register', '999', 'blk123'], { encoding: 'utf8', cwd: WORKTREE_DIR })
+  expect(r.stderr?.trim()).toBe('run lane register from the main checkout')
+  expect(r.status).toBe(1)
+})
+
+test('lane register: appends LANE_BLOCK to .env.lane', () => {
+  const { mkdirSync, writeFileSync, readFileSync, rmSync } = require('node:fs')
+  const { join } = require('node:path')
+  // Go up 4 levels: tests/scripts -> tests -> worktree -> .worktrees -> main checkout
+  const mainRoot = resolve(__dirname, '../../../..')
+  const fakeWorktree = join(mainRoot, '.worktrees', '9999-register-test')
+  const envFile = join(fakeWorktree, '.env.lane')
+  mkdirSync(fakeWorktree, { recursive: true })
+  writeFileSync(envFile, 'PORT=3999\n')
+  try {
+    const r = spawnSync('bash', [LANE, 'register', '9999', 'block:abc-123'], {
+      encoding: 'utf8',
+      cwd: mainRoot,
+    })
+    expect(r.status).toBe(0)
+    expect(readFileSync(envFile, 'utf8')).toContain('LANE_BLOCK=block:abc-123')
+  } finally {
+    rmSync(fakeWorktree, { recursive: true, force: true })
+  }
+})
