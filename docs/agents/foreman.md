@@ -57,6 +57,8 @@ The foreman handles every mechanical step — from idea detection through auto-m
 6. Apply labels: `ready`, `P<n>`, `area:<x>`, `type:<x>`.
 7. `gh issue create` with final ACs in body.
 
+> **HARD GATE:** When the PO approves a brainstormed design, the ONLY permitted next action is `gh issue create`. Never commit a spec to `main`, never write product code, never invoke any implementation skill. The design context belongs in the GitHub issue body, not in a file on `main`. Approval of the design is not approval of anything that comes after it.
+
 ## Stage 2 — Lane start
 
 **No direct edits.** The foreman never edits files directly. All implementation — including doc fixes and chores — goes through `scripts/lane start <issue> <slug>` first. File reads for triage or status are fine.
