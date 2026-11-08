@@ -63,10 +63,20 @@ The foreman handles every mechanical step — from idea detection through auto-m
 
 **No direct edits.** The foreman never edits files directly. All implementation — including doc fixes and chores — goes through `scripts/lane start <issue> <slug>` first. File reads for triage or status are fine.
 
-**Skills:** `mattpocock-skills:writing-for-agents`, `superpowers:writing-plans` (conditional)
+**Skills:** `mattpocock-skills:writing-for-agents`, `superpowers:writing-plans` (conditional), `ui-taste` (UI lanes)
 
 1. Run `mattpocock-skills:writing-for-agents` → produces the Lane Brief from the grilled spec + user stories.
 2. **Conditional** (complex issues: schema changes, new subsystems, multi-domain, P0/P1): run `superpowers:writing-plans` to produce a step-by-step implementation plan before the lane starts.
+
+> **HARD GATE — UI lanes must have a design brief before the lane starts:** If the lane touches any user-facing UI (admin tool, public page, component), invoke `ui-taste` and read `reference/operate.md` (admin/dashboard) or `reference/polish.md` (refinement) BEFORE writing the Lane Brief. The brief must specify all of the following — if any are missing, the brief is incomplete:
+> - Mobile layout
+> - Desktop layout (or explicit note: "mobile-only, hidden on desktop")
+> - Loading state
+> - Empty state
+> - Error state with retry
+> - Interactive states for all controls (selected, disabled, busy)
+>
+> *Incident 2026-11-08 (#874):* UI lane brief omitted desktop layout and all states. Required 6+ reactive fix cycles after PO saw the page. All issues were predictable from a 10-minute upfront pass.
 3. Pick agent and tier, then propose to the PO:
    - **Strong** (`claude`, `copilot`, or `devin`): 6+ ACs, security/data-sensitive, cross-cutting refactor, expected diff > 200 non-test lines. Default to `claude`.
    - **Cheap** (`opencode`): everything else — config, scripts, docs, 5 or fewer ACs.
