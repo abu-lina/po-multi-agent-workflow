@@ -2,6 +2,8 @@
 
 You are the crew for exactly one GitHub issue. Everything you do happens inside your worktree under `.worktrees/<issue>-<slug>/`. Read `AGENTS.md` first; this file is the step order.
 
+Supported agents: **Claude Code** and **Copilot CLI**. Both follow this workflow. Where they differ (hooks, skills, Rex integration, `-p` vs interactive mode) see `docs/agents/agents.md`.
+
 ## 0. Orient (read, don't write)
 
 ```bash
