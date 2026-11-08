@@ -19,7 +19,6 @@ Both follow the same lane workflow. The table below documents where they diverge
 | **Git / GH tools**         | Built-in: `Bash`, `Edit`, `Write`, `Read`, plus `gh` via Bash. Full file-system access. | Built-in: file edits and shell commands via `gh copilot suggest`. Same `gh` CLI access. |
 | **Permission model**       | Per-tool allow/deny in `settings.json`. Explicit denies for merge, push-to-main, rebase. | Per-session flags (`--allow-runs`, etc.). No persistent per-tool deny list. |
 | **Reasoning effort**       | Model-level (Opus / Sonnet / Haiku). No per-call effort flag. | `--reasoning-effort low\|medium\|high` per invocation (Auto model only). |
-| **Sandbox**                | No built-in sandbox flag. Worktree isolation is the boundary. | No equivalent sandbox flag. Rely on worktree isolation. |
 | **Stop / handoff signal**  | `Stop` hook writes `.lane-signal` automatically.   | Wrapper script must `echo "done: ..." > .lane-signal` after the agent exits. |
 
 ## Fallback patterns for Copilot lanes
@@ -34,10 +33,3 @@ When a feature is native in Claude Code but absent in Copilot CLI, use the follo
 
 **Rex integration** — Rex opens the wrapper (`scripts/copilot-lane <issue>`) in the worktree pane instead of `claude -p`. The foreman reads `.lane-signal` the same way.
 
-## Choosing an agent
-
-Both agents can run any lane. The practical differences:
-
-- Hooks and skills have no native fallback in Copilot. If your lane relies heavily on auto-triggered skills, Claude Code avoids wrapper complexity.
-- Reasoning effort is only tunable per-call in Copilot. For complex refactors or P0 issues, Copilot's `--reasoning-effort high` can be more direct than switching Claude models.
-- Either agent can be used; the foreman specifies which in the lane brief.
