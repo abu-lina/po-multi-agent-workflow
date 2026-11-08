@@ -71,3 +71,24 @@ test('lane register: errors when run from a worktree', () => {
   expect(r.stderr?.trim()).toBe('run lane register from the main checkout')
   expect(r.status).toBe(1)
 })
+
+test('lane register: appends LANE_BLOCK to .env.lane', () => {
+  const { mkdirSync, writeFileSync, readFileSync, rmSync } = require('node:fs')
+  const { join } = require('node:path')
+  // Go up 4 levels: tests/scripts -> tests -> worktree -> .worktrees -> main checkout
+  const mainRoot = resolve(__dirname, '../../../..')
+  const fakeWorktree = join(mainRoot, '.worktrees', '9999-register-test')
+  const envFile = join(fakeWorktree, '.env.lane')
+  mkdirSync(fakeWorktree, { recursive: true })
+  writeFileSync(envFile, 'PORT=3999\n')
+  try {
+    const r = spawnSync('bash', [LANE, 'register', '9999', 'block:abc-123'], {
+      encoding: 'utf8',
+      cwd: mainRoot,
+    })
+    expect(r.status).toBe(0)
+    expect(readFileSync(envFile, 'utf8')).toContain('LANE_BLOCK=block:abc-123')
+  } finally {
+    rmSync(fakeWorktree, { recursive: true, force: true })
+  }
+})

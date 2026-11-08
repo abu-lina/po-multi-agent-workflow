@@ -81,7 +81,7 @@ The foreman handles every mechanical step — from idea detection through auto-m
    ```bash
    scripts/lane register <issue> <block_id>
    ```
-   This appends `LANE_BLOCK=<block_id>` to the lane's `.env.lane`, so the Stop hook can target the correct pane and `lane done` can close it.
+   This appends `LANE_BLOCK=<block_id>` to the lane's `.env.lane`, so `lane done` can close the lane's pane when finished.
 6. Pass the Lane Brief as the lane's opening prompt.
 7. Stay as foreman. Never write code or edit source in this session.
 

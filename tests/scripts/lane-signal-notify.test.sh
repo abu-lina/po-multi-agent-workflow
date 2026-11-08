@@ -74,6 +74,34 @@ check "no-op in main checkout: rex not called" "$([ -z "$rex_calls" ] && echo 1 
 check "no-op in main checkout: .lane-signal preserved" "$([ -f "$d4/.lane-signal" ] && echo 1 || echo 0)"
 rm -rf "$d4"
 
+# Test 5: .lane-signal preserved when rex send fails
+cat > "$tmpbin/rex" <<ENDREX
+#!/usr/bin/env bash
+exit 1
+ENDREX
+chmod +x "$tmpbin/rex"
+d5="$(mktemp -d)"; mkdir -p "$d5/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d5/.worktrees/42-slug/.env.lane"
+printf 'handoff: done' > "$d5/.worktrees/42-slug/.lane-signal"
+MOCK_TOPLEVEL="$d5/.worktrees/42-slug" bash "$HOOK" <<< ""
+check ".lane-signal preserved when rex send fails" "$([ -f "$d5/.worktrees/42-slug/.lane-signal" ] && echo 1 || echo 0)"
+rm -rf "$d5"
+# Restore passing rex for any further tests
+cat > "$tmpbin/rex" <<ENDREX
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$rex_log"
+ENDREX
+chmod +x "$tmpbin/rex"
+
+# Test 6: no-op when FOREMAN_BLOCK fails validation (contains newline/spaces via embedded chars)
+d6="$(mktemp -d)"; mkdir -p "$d6/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk with space\n' > "$d6/.worktrees/42-slug/.env.lane"
+printf 'handoff: done' > "$d6/.worktrees/42-slug/.lane-signal"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d6/.worktrees/42-slug" bash "$HOOK" <<< ""
+check "no-op when FOREMAN_BLOCK fails validation" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
+rm -rf "$d6"
+
 # ------------------------------------------------------------------
 
 echo ""

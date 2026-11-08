@@ -224,6 +224,8 @@ REX_SESSION_ID=${REX_SESSION:-}
 FOREMAN_BLOCK=${REX_BLOCK:-}
 EOF
 
+  [[ -n "${REX_BLOCK:-}" ]] || printf 'warning: REX_BLOCK not set; lane signals will not reach the foreman\n' >&2
+
   if [[ -d "$root/node_modules" ]]; then
     cp -c -R "$root/node_modules" "$dir/node_modules" 2>/dev/null ||
       cp -R "$root/node_modules" "$dir/node_modules" ||
@@ -243,6 +245,7 @@ lane_register() {
   [[ "$root" == */.worktrees/* ]] && { echo "run lane register from the main checkout" >&2; return 1; }
   dir="$(_lane_dir "$root" "$issue")"
   [[ -n "$dir" ]] || { echo "no worktree for #$issue" >&2; return 1; }
+  [[ "$block_id" =~ ^[a-zA-Z0-9_:-]+$ ]] || { echo "invalid block_id: must contain only alphanumeric, -, :, _" >&2; return 1; }
   printf 'LANE_BLOCK=%s\n' "$block_id" >> "$dir/.env.lane"
 }
 
@@ -276,6 +279,11 @@ lane_done() {
     lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && { echo "a process still listens on :$port" >&2; return 1; }
   fi
 
+  # Close the lane pane before removing the worktree so .env.lane is still readable on retry.
+  if [[ -n "$lane_block" ]]; then
+    rex block close -s "$rex_session_id" "$lane_block" 2>/dev/null || true
+  fi
+
   # Git's force option removes ignored build output such as .next and node_modules.
   if [[ -d "$dir" ]] && ! git worktree remove --force "$dir"; then
     echo "could not remove git worktree $dir" >&2
@@ -290,9 +298,6 @@ lane_done() {
     cleanup_failed=1
   fi
   [[ "$cleanup_failed" == 0 ]] || return 1
-  if [[ -n "$lane_block" ]]; then
-    rex block close -s "$rex_session_id" "$lane_block" 2>/dev/null || true
-  fi
   echo "lane #$issue removed"
 }
 
