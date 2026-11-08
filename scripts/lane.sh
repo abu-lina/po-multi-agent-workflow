@@ -102,11 +102,10 @@ _lane_rex_cmd() {
 
   case "$agent" in
     claude)
-      [[ -n "$model" ]] && model_flag=" --model $model"
+      [[ -n "$model" ]] && model_flag=" --model $(printf '%q' "$model")"
       printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %q && claude%s"\n' "$dir" "$model_flag"
       ;;
     copilot)
-      # shortcut: flags must not contain spaces; ${flags[*]} breaks if one does
       local -a flags=(
         --allow-tool=write
         '--allow-tool=shell(npm:*)'
@@ -140,8 +139,10 @@ _lane_rex_cmd() {
           *) flags+=(--model "$model") ;;
         esac
       fi
+      local quoted_flags
+      quoted_flags="$(printf '%q ' "${flags[@]}")"
       printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %q && copilot %s"\n' \
-        "$dir" "${flags[*]}"
+        "$dir" "$quoted_flags"
       ;;
     devin)
       root="$(git rev-parse --show-toplevel)" || return 1
@@ -168,12 +169,14 @@ _lane_rex_cmd() {
         { echo "could not write Devin lane sandbox config" >&2; return 1; }
       local -a flags=(--permission-mode accept-edits --sandbox --config "$config_file")
       [[ -n "$model" ]] && flags+=(--model "$model")
+      local quoted_flags
+      quoted_flags="$(printf '%q ' "${flags[@]}")"
       printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %q && devin %s"\n' \
-        "$dir" "${flags[*]}"
+        "$dir" "$quoted_flags"
       ;;
     opencode)
       # shortcut: opencode CLI flags TBD; update once opencode CLI stabilises
-      [[ -n "$model" ]] && model_flag=" --model $model"
+      [[ -n "$model" ]] && model_flag=" --model $(printf '%q' "$model")"
       printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %q && opencode%s"\n' "$dir" "$model_flag"
       ;;
   esac
@@ -311,21 +314,4 @@ lane_status() {
         ;;
     esac
   done <<<"$worktrees"
-  # flush the last entry if the input had no trailing blank line
-  if [[ "$worktree" == */.worktrees/* && -n "$branch" ]]; then
-    pr_info="$(gh pr view "$branch" --json state,statusCheckRollup 2>/dev/null)"
-    if [[ -n "$pr_info" ]]; then
-      pr_state="$(printf '%s\n' "$pr_info" | jq -r '.state // "none"')"
-      ci_status="$(printf '%s\n' "$pr_info" | jq -r '
-        [.statusCheckRollup[]? | .conclusion // .status] |
-        if length == 0 then "none"
-        elif all(. == "SUCCESS") then "pass"
-        elif any(. == "FAILURE") then "fail"
-        else "pending" end')"
-    else
-      pr_state="none"
-      ci_status="-"
-    fi
-    printf '%s\t%s\t%s\t%s\n' "$worktree" "$branch" "$pr_state" "$ci_status"
-  fi
 }

@@ -25,6 +25,9 @@
     "deny": [
       "Bash(git merge)",
       "Bash(git rebase)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git config --global*)",
       "Bash(pass-cli *)",
       "Write(.env.local)",
       "Bash(gh pr merge)"

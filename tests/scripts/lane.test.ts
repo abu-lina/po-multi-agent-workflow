@@ -38,15 +38,18 @@ describe('foreman: command is removed', () => {
   }
 })
 
+// Worktree root is 2 dirs up from tests/scripts/; it lives inside .worktrees/ so the
+// guard fires even when vitest is invoked from a different working directory.
+const WORKTREE_DIR = resolve(__dirname, '../..')
+
 test('lane done: errors when run from a worktree', () => {
-  // spawnSync inherits cwd = worktree root, which is inside .worktrees/
-  const { stderr, status } = runLane(['done', '999'])
-  expect(stderr).toBe('run lane_done from the main checkout')
-  expect(status).toBe(1)
+  const r = spawnSync('bash', [LANE, 'done', '999'], { encoding: 'utf8', cwd: WORKTREE_DIR })
+  expect(r.stderr?.trim()).toBe('run lane_done from the main checkout')
+  expect(r.status).toBe(1)
 })
 
 test('lane start: errors when run from a worktree', () => {
-  const { stderr, status } = runLane(['start', '999', 'slug'])
-  expect(stderr).toBe('run lane from the main checkout, not a worktree')
-  expect(status).toBe(1)
+  const r = spawnSync('bash', [LANE, 'start', '999', 'slug'], { encoding: 'utf8', cwd: WORKTREE_DIR })
+  expect(r.stderr?.trim()).toBe('run lane from the main checkout, not a worktree')
+  expect(r.status).toBe(1)
 })
