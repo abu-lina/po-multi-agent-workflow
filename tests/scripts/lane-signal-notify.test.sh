@@ -98,6 +98,27 @@ printf '%s\n' "\$*" >> "$rex_log"
 ENDREX
 chmod +x "$tmpbin/rex"
 
+# Test 7: send succeeds, send-key fails → signal still deleted
+cat > "$tmpbin/rex" <<ENDREX
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "send-key" ]]; then exit 1; fi
+printf '%s\n' "\$*" >> "$rex_log"
+ENDREX
+chmod +x "$tmpbin/rex"
+d7="$(mktemp -d)"; mkdir -p "$d7/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d7/.worktrees/42-slug/.env.lane"
+printf 'handoff: done' > "$d7/.worktrees/42-slug/.lane-signal"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d7/.worktrees/42-slug" bash "$HOOK" <<< ""
+check ".lane-signal deleted when send-key fails" "$([ ! -f "$d7/.worktrees/42-slug/.lane-signal" ] && echo 1 || echo 0)"
+rm -rf "$d7"
+# Restore passing rex for any further tests
+cat > "$tmpbin/rex" <<ENDREX
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$rex_log"
+ENDREX
+chmod +x "$tmpbin/rex"
+
 # Test 6: no-op when FOREMAN_BLOCK fails validation (contains newline/spaces via embedded chars)
 d6="$(mktemp -d)"; mkdir -p "$d6/.worktrees/42-slug"
 printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk with space\n' > "$d6/.worktrees/42-slug/.env.lane"
