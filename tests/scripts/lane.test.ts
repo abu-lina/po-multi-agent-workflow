@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
@@ -32,4 +33,11 @@ describe('foreman: rejects invalid agent', () => {
       expect(status).toBe(1)
     })
   }
+})
+
+describe('foreman: herdr args', () => {
+  test('--no-remote flag is absent from foreman herdr call', () => {
+    const src = readFileSync(`${LANE}.sh`, 'utf8')
+    expect(src).not.toContain('--no-remote')
+  })
 })
