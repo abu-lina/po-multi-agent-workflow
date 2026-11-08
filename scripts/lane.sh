@@ -211,6 +211,14 @@ lane() {
   git fetch -q origin "$branch" || return 1
   git worktree add "$dir" "$branch" || return 1
 
+  # Copy .env.local so the dev server has real credentials — it is gitignored and never
+  # present in a fresh worktree. Warn but don't fail if it doesn't exist in the main checkout.
+  if [ -f ".env.local" ]; then
+    cp ".env.local" "$dir/.env.local"
+  else
+    echo "warning: no .env.local in main checkout — dev server in worktree will lack credentials" >&2
+  fi
+
   # Branch created from origin/main tracks it; point at the lane's own remote branch.
   git -C "$dir" branch --set-upstream-to="origin/$branch" "$branch" >/dev/null ||
     { echo "could not set upstream of $branch to origin/$branch" >&2; return 1; }
