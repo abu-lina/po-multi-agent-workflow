@@ -29,8 +29,12 @@ One of three routing categories — Frontend, Backend, or Infra — that determi
 _Avoid_: Work type, category, domain type
 
 **Handoff**:
-The structured signal sent by a lane to the foreman when implementation is complete and all four verification checks pass. Produced by the `handoff` skill. Triggers the Checkpoint.
+The structured signal sent by a lane to the foreman when implementation is complete and all four verification checks pass. Produced by the `handoff` skill. Writes `.lane-signal` with `handoff: <summary>`, which the lane's Stop hook delivers to the foreman's pane via Rex. Triggers the Checkpoint.
 _Avoid_: Done signal, completion message, status update
+
+**Block Signal**:
+The signal sent by a lane to the foreman when it hits a stop condition before completing. The lane writes `.lane-signal` with `blocked: <reason>` before stopping; the Stop hook delivers it to the foreman's pane. Distinct from Handoff: a Block Signal means the lane needs owner input before it can continue.
+_Avoid_: Error, failure, blocker (a Block Signal is a deliberate stop, not a crash)
 
 **Checkpoint**:
 The stage where the PO verifies the lane's work on localhost. Triggered by a Handoff. The foreman pre-opens a Rex pane with the dev server running. Ends when the PO sends a positive reply.
