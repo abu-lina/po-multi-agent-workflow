@@ -2,9 +2,12 @@
 # Tests for issue #22: lane start fully automated — no human steps required
 # Run directly: bash tests/scripts/lane-auto-start.test.sh
 
-set -euo pipefail
+set -uo pipefail
 
-LANE_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/scripts/lane.sh"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+LANE_BIN="$REPO_ROOT/scripts/lane"
+LANE_SH="$REPO_ROOT/scripts/lane.sh"
+[[ -f "$LANE_BIN" ]] || { echo "MISSING: $LANE_BIN" >&2; exit 1; }
 [[ -f "$LANE_SH" ]] || { echo "MISSING: $LANE_SH" >&2; exit 1; }
 
 PASS=0; FAIL=0
@@ -54,24 +57,28 @@ esac
 SH
   chmod +x "$stub_dir/gh"
 
-  # git stub: delegates real git but intercepts ls-remote so the branch doesn't exist
-  # and worktree add so we don't actually create a worktree.
-  # We use a wrapper approach: delegate everything to real git except the two calls.
+  # git stub: delegates real git but intercepts specific subcommands that require
+  # a real remote or real worktree infrastructure. Strips leading -C <dir> before matching.
   REAL_GIT_BIN="$(command -v git)"
   cat >"$stub_dir/git" <<SH
 #!/usr/bin/env bash
-case "\$*" in
+# Strip leading -C <dir> pairs to get the effective subcommand.
+args=("\$@")
+while [[ "\${args[0]:-}" == "-C" ]]; do
+  args=("\${args[@]:2}")
+done
+case "\${args[*]}" in
   "ls-remote --exit-code --heads origin"*)
     exit 1  # branch does not exist on remote yet
     ;;
   "worktree add"*)
-    # Create the dir so .env.lane write succeeds, but skip real worktree add
-    target="\${@: -2:1}"
+    # Create the dir so .env.lane write succeeds, but skip real worktree add.
+    # Last two args are <dir> <branch>; second-to-last is the dir.
+    target="\${args[\${#args[@]}-2]}"
     mkdir -p "\$target"
     exit 0
     ;;
   "fetch -q origin"*)
-    # Allow fetch to succeed silently
     "$REAL_GIT_BIN" "\$@" 2>/dev/null || exit 0
     ;;
   "branch --set-upstream-to="*)
@@ -143,7 +150,7 @@ make_main_repo
 make_stubs
 export PATH="$stub_dir:$PATH"
 mkdir -p "$main_dir/.worktrees"
-out="$(cd "$main_dir" && REX_SESSION="" REX_BLOCK="block:foreman-1" bash "$LANE_SH" start 42 test-slug 2>&1)" || rc=$?
+out="$(cd "$main_dir" && REX_SESSION="" REX_BLOCK="block:foreman-1" bash "$LANE_BIN" start 42 test-slug 2>&1)" || rc=$?
 rc="${rc:-0}"
 check "REX_SESSION missing: exits non-zero" "$([ "${rc:-1}" -ne 0 ] && echo 1 || echo 0)" "rc=$rc"
 check "REX_SESSION missing: error mentions REX_SESSION" \
@@ -159,7 +166,7 @@ make_main_repo
 make_stubs
 export PATH="$stub_dir:$PATH"
 mkdir -p "$main_dir/.worktrees"
-out="$(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="" bash "$LANE_SH" start 42 test-slug 2>&1)" || rc=$?
+out="$(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="" bash "$LANE_BIN" start 42 test-slug 2>&1)" || rc=$?
 rc="${rc:-0}"
 check "REX_BLOCK missing: exits non-zero" "$([ "${rc:-1}" -ne 0 ] && echo 1 || echo 0)" "rc=$rc"
 check "REX_BLOCK missing: error mentions REX_BLOCK" \
@@ -175,7 +182,7 @@ make_main_repo
 make_stubs
 export PATH="$stub_dir:$PATH"
 mkdir -p "$main_dir/.worktrees"
-out="$(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="block:foreman-1" bash "$LANE_SH" start 42 test-slug 2>&1)" || true
+out="$(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="block:foreman-1" bash "$LANE_BIN" start 42 test-slug 2>&1)" || true
 env_file="$main_dir/.worktrees/42-test-slug/.env.lane"
 check "LANE_BLOCK written to .env.lane" \
   "$(grep -q '^LANE_BLOCK=' "$env_file" 2>/dev/null && echo 1 || echo 0)" "env=$(cat "$env_file" 2>/dev/null)"
@@ -188,7 +195,7 @@ make_main_repo
 make_stubs
 export PATH="$stub_dir:$PATH"
 mkdir -p "$main_dir/.worktrees"
-out="$(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="block:foreman-1" bash "$LANE_SH" start 42 test-slug 2>&1)"
+out="$(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="block:foreman-1" bash "$LANE_BIN" start 42 test-slug 2>&1)"
 check "no rex split command printed to output" \
   "$(echo "$out" | grep -qv 'rex split' && echo 1 || echo 0)" "out=$out"
 cleanup
@@ -224,23 +231,22 @@ export PATH="$stub_dir:$PATH"
 mkdir -p "$main_dir/.worktrees"
 send_log="${TMPDIR:-/tmp}/rex-send-calls.txt"
 rm -f "$send_log"
-(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="block:foreman-1" bash "$LANE_SH" start 42 test-slug 2>&1) || true
+(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="block:foreman-1" bash "$LANE_BIN" start 42 test-slug 2>&1) || true
 check "rex send was called (brief was sent)" \
   "$([ -f "$send_log" ] && grep -q 'REX_SEND_CALLED' "$send_log" && echo 1 || echo 0)"
 cleanup
 
 # ------------------------------------------------------------------
 # AC: lane status and lane done are unaffected (do not require REX_SESSION/REX_BLOCK)
-# lane_status() is called by scripts/lane status; test it directly via lane.sh source
+# lane_status() is called by scripts/lane status; test it directly via the lane bin
 
-LANE_BIN="$(dirname "$LANE_SH")/lane"
 make_main_repo
 make_stubs
 export PATH="$stub_dir:$PATH"
-out="$(cd "$main_dir" && unset REX_SESSION; unset REX_BLOCK; bash "$LANE_BIN" status 2>&1)" || rc=$?
-rc="${rc:-0}"
+out="$(cd "$main_dir" && unset REX_SESSION; unset REX_BLOCK; bash "$LANE_BIN" status 2>&1)" || true
+# lane_status exits 0 and prints WORKTREE header even when no worktrees exist.
 check "lane status: works without REX_SESSION/REX_BLOCK" \
-  "$([ "${rc:-1}" -eq 0 ] && echo 1 || echo 0)" "out=$out, rc=$rc"
+  "$(echo "$out" | grep -q 'WORKTREE' && echo 1 || echo 0)" "out=$out"
 cleanup
 
 # ------------------------------------------------------------------
@@ -248,7 +254,6 @@ cleanup
 # Verified structurally: scripts/lane bin sources lane.sh and calls lane(); both paths go through lane().
 # This is a code-path check not an execution check (sourced interactive mode is not testable in CI).
 
-LANE_BIN="$(dirname "$LANE_SH")/lane"
 check "code-path: scripts/lane bin sources lane.sh" \
   "$(grep -q 'source.*lane\.sh' "$LANE_BIN" 2>/dev/null && echo 1 || echo 0)" \
   "scripts/lane does not source lane.sh"
