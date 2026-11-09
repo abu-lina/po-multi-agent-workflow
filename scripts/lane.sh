@@ -216,9 +216,11 @@ _lane_rex_open() {
   split_json="$(rex split -s "$REX_SESSION" --split=right --json -- bash -c "$agent_cmd")" ||
     { printf 'rex split failed\n' >&2; return 1; }
   block_id="$(printf '%s\n' "$split_json" | jq -r '.block_ids[0]')" ||
-    { printf 'could not parse block_ids from rex split output\n' >&2; return 1; }
+    { printf 'could not parse block_ids from rex split output: %s\n' "$split_json" >&2; return 1; }
   [[ -n "$block_id" && "$block_id" != "null" ]] ||
-    { printf 'rex split returned no block id\n' >&2; return 1; }
+    { printf 'rex split returned no block id; output: %s\n' "$split_json" >&2; return 1; }
+  [[ "$block_id" =~ ^[a-zA-Z0-9_:-]+$ ]] ||
+    { printf 'rex split returned invalid block_id: %s\n' "$block_id" >&2; return 1; }
 
   printf 'LANE_BLOCK=%s\n' "$block_id" >> "$env_file" ||
     { printf 'could not write LANE_BLOCK to %s\n' "$env_file" >&2; return 1; }
@@ -232,19 +234,23 @@ _lane_rex_open() {
       break
     fi
     sleep 1
-    (( i++ )) || true
+    i=$(( i + 1 ))
   done
+  (( i < 30 )) || { printf 'timed out waiting for prompt in block %s\n' "$block_id" >&2; return 1; }
 
-  brief="$(_lane_prompt "$issue")"
-  rex send -s "$REX_SESSION" -b "$block_id" -- "$brief" || return 1
+  # Send the brief via stdin so multi-line text is delivered as a single paste,
+  # not as individual keystrokes (newlines would fire Enter prematurely).
+  _lane_prompt "$issue" | rex send -s "$REX_SESSION" -b "$block_id" || return 1
 
+  # Give the terminal time to render before checking for the expansion prompt.
+  sleep 1
   local post_send
   post_send="$(rex capture -s "$REX_SESSION" -b "$block_id" 2>/dev/null)" || true
   if printf '%s\n' "$post_send" | grep -q 'paste again to expand'; then
-    rex send -s "$REX_SESSION" -b "$block_id" --press enter || return 1
+    rex send-key -s "$REX_SESSION" -b "$block_id" enter || return 1
   fi
 
-  rex send -s "$REX_SESSION" -b "$block_id" --press enter || return 1
+  rex send-key -s "$REX_SESSION" -b "$block_id" enter || return 1
   printf 'lane #%s: brief sent to block %s\n' "$issue" "$block_id"
 }
 
@@ -256,6 +262,9 @@ lane() {
 
   [[ -n "${REX_SESSION:-}" ]] || { printf 'REX_SESSION is not set; run lane from a Rex terminal\n' >&2; return 1; }
   [[ -n "${REX_BLOCK:-}" ]] || { printf 'REX_BLOCK is not set; run lane from a Rex terminal\n' >&2; return 1; }
+  [[ "${REX_SESSION:-}" =~ ^[a-zA-Z0-9_:-]+$ ]] || { printf 'REX_SESSION contains invalid characters\n' >&2; return 1; }
+  [[ "${REX_BLOCK:-}" =~ ^[a-zA-Z0-9_:-]+$ ]] || { printf 'REX_BLOCK contains invalid characters\n' >&2; return 1; }
+  [[ "$issue" =~ ^[0-9]+$ ]] || { printf 'issue must be a positive integer\n' >&2; return 1; }
 
   local root dir branch port base
   root="$(_lane_root)" || { echo "not inside a git repo" >&2; return 1; }

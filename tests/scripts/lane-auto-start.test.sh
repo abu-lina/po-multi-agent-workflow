@@ -91,39 +91,18 @@ esac
 SH
   chmod +x "$stub_dir/git"
 
-  # rex stub: simulates split --json returning a block id, and capture showing prompt
-  cat >"$stub_dir/rex" <<'SH'
-#!/usr/bin/env bash
-case "$1 $2" in
-  "split --json"*|"split -s"*)
-    printf '{"block_ids":["block:test-abc-123"]}\n'
-    ;;
-  "capture "*)
-    printf '❯\n'
-    ;;
-  "send "*)
-    exit 0
-    ;;
-  *)
-    exit 0
-    ;;
-esac
-SH
-  # rex split args: rex split -s <session> --split=right --json -- ...
-  # Need to match on positional args more carefully
   cat >"$stub_dir/rex" <<'SH'
 #!/usr/bin/env bash
 cmd="${1:-}"
 shift || true
 case "$cmd" in
   split)
-    # Expect --json flag somewhere in args; output block JSON
     printf '{"block_ids":["block:test-abc-123"]}\n'
     ;;
   capture)
     printf '❯\n'
     ;;
-  send)
+  send|send-key)
     exit 0
     ;;
   *)
@@ -189,6 +168,34 @@ check "LANE_BLOCK written to .env.lane" \
 cleanup
 
 # ------------------------------------------------------------------
+# AC: REX_SESSION with invalid characters — exits with error before creating anything
+
+make_main_repo
+make_stubs
+export PATH="$stub_dir:$PATH"
+mkdir -p "$main_dir/.worktrees"
+out="$(cd "$main_dir" && REX_SESSION="session;bad" REX_BLOCK="block:foreman-1" bash "$LANE_BIN" start 42 test-slug 2>&1)" || rc=$?
+rc="${rc:-0}"
+check "REX_SESSION invalid chars: exits non-zero" "$([ "${rc:-1}" -ne 0 ] && echo 1 || echo 0)" "rc=$rc"
+check "REX_SESSION invalid chars: mentions REX_SESSION" \
+  "$(echo "$out" | grep -qi 'REX_SESSION' && echo 1 || echo 0)" "out=$out"
+cleanup
+
+# ------------------------------------------------------------------
+# AC: non-numeric issue — exits with error before creating anything
+
+make_main_repo
+make_stubs
+export PATH="$stub_dir:$PATH"
+mkdir -p "$main_dir/.worktrees"
+out="$(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="block:foreman-1" bash "$LANE_BIN" start 'not-a-number' test-slug 2>&1)" || rc=$?
+rc="${rc:-0}"
+check "non-numeric issue: exits non-zero" "$([ "${rc:-1}" -ne 0 ] && echo 1 || echo 0)" "rc=$rc"
+check "non-numeric issue: error mentions issue must be integer" \
+  "$(echo "$out" | grep -qi 'integer\|number' && echo 1 || echo 0)" "out=$out"
+cleanup
+
+# ------------------------------------------------------------------
 # AC: lane start does not print a rex split command (no print-and-paste output)
 
 make_main_repo
@@ -217,7 +224,7 @@ case "$cmd" in
   capture)
     printf '❯\n'
     ;;
-  send)
+  send|send-key)
     echo "REX_SEND_CALLED" >> "${TMPDIR:-/tmp}/rex-send-calls.txt"
     exit 0
     ;;
