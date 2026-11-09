@@ -179,6 +179,29 @@ MOCK_TOPLEVEL="$d11/.worktrees/42-slug" bash "$HOOK" <<< ""
 check "fallback with missing FOREMAN_BLOCK: silent exit" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
 rm -rf "$d11"
 
+# Test 12: newline injection in signal — delivered text has no newline
+d12="$(mktemp -d)"; mkdir -p "$d12/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d12/.worktrees/42-slug/.env.lane"
+printf 'handoff: done\nrm -rf /' > "$d12/.worktrees/42-slug/.lane-signal"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d12/.worktrees/42-slug" bash "$HOOK" <<< ""
+delivered="$(cat "$rex_log" 2>/dev/null || echo "")"
+check "signal newline injection: rex called" "$([ -f "$rex_log" ] && echo 1 || echo 0)"
+check "signal newline injection: no newline in delivered text" "$([[ $(wc -l < "$rex_log") -eq 2 ]] && echo 1 || echo 0)"
+rm -rf "$d12"
+
+# Test 13: newline injection in fallback git commit subject — no newline in delivered message
+d13="$(mktemp -d)"; mkdir -p "$d13/.worktrees/42-slug"
+(cd "$d13/.worktrees/42-slug" && "$REAL_GIT" init -q && "$REAL_GIT" commit --allow-empty -m $'done\nrm -rf /' -q)
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d13/.worktrees/42-slug/.env.lane"
+# No .lane-signal
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d13/.worktrees/42-slug" bash "$HOOK" <<< ""
+fallback_msg="$(cat "$rex_log" 2>/dev/null || echo "")"
+check "fallback newline injection: rex called" "$([ -f "$rex_log" ] && echo 1 || echo 0)"
+check "fallback newline injection: no newline in delivered message" "$([[ $(wc -l < "$rex_log") -eq 2 ]] && echo 1 || echo 0)"
+rm -rf "$d13"
+
 # ------------------------------------------------------------------
 
 echo ""

@@ -84,8 +84,6 @@ Do not mark done until all blocking findings are addressed.
 
 ## 7. Report
 
-Update your Herdr workspace status to `blocked` or `done` every time you stop, not only when the PR is green and ready. This is the owner's signal; do it as the last action before leaving the lane.
-
 Before ending the session, write one of these to `.lane-signal`:
 
 - PR ready: `echo "handoff: PR #<n> ready for review" > .lane-signal`
