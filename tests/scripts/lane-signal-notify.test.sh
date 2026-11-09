@@ -43,12 +43,13 @@ MOCK_TOPLEVEL="$d1/.worktrees/99-slug" bash "$HOOK" <<< ""
 check "no-op when .env.lane absent" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
 rm -rf "$d1"
 
-# Test 2: no-op when .lane-signal absent
+# Test 2: fallback sent when .lane-signal absent (valid env, no prior signal file)
 d2="$(mktemp -d)"; mkdir -p "$d2/.worktrees/42-slug"
+(cd "$d2/.worktrees/42-slug" && "$REAL_GIT" init -q && "$REAL_GIT" commit --allow-empty -m "initial commit" -q)
 printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d2/.worktrees/42-slug/.env.lane"
 rm -f "$rex_log"
 MOCK_TOPLEVEL="$d2/.worktrees/42-slug" bash "$HOOK" <<< ""
-check "no-op when .lane-signal absent" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
+check "fallback sent when .lane-signal absent" "$([ -f "$rex_log" ] && echo 1 || echo 0)"
 rm -rf "$d2"
 
 # Test 3: signal consumed and file deleted
