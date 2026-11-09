@@ -229,3 +229,31 @@ A lane is blocked when it fires a block signal without reaching Handoff.
 4. If the lane cannot proceed after two relays: close the lane worktree, update the issue with findings, and return the issue to `ready` for re-shaping.
 
 **Never** unblock a lane by writing code in the foreman session.
+
+## Rex lane close — known gotchas
+
+### TRAP: `rex close -b` does not exist (2026-11-09)
+
+`scripts/lane done <issue>` removes the worktree and branch but does **not** close the Rex pane when `LANE_BLOCK` was never registered in `.env.lane` (see the silent-stop TRAP). The foreman must close the pane manually using the correct command:
+
+```bash
+# WRONG — -b flag does not exist on rex close
+rex close -b <block_id>
+
+# CORRECT
+rex block close <BLOCK_ID> -s <SESSION>
+```
+
+**Identifying the right pane:**
+
+```bash
+# 1. List pane IDs
+rex block ls -s <SESSION>
+
+# 2. Identify the lane pane by its shell prompt
+rex block capture -b <ID> -s <SESSION> --trim 2>&1 | tail -5
+# Look for the worktree dir in the prompt, e.g.: "874-provider-review-queue %"
+
+# 3. Close it
+rex block close <ID> -s <SESSION>
+```
