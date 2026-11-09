@@ -42,8 +42,20 @@ _lane_base() {
 }
 
 _lane_check_main() {
-  local unpushed
+  local unpushed behind
   unpushed="$(git log --oneline origin/main..main)" || return 1
+  behind="$(git log --oneline main..origin/main)" || return 1
+  if [[ -n "$unpushed" && -n "$behind" ]]; then
+    printf 'local main and origin/main have diverged; resolve manually before starting a lane\n' >&2
+    return 1
+  fi
+  if [[ -n "$behind" ]]; then
+    local n
+    n="$(printf '%s\n' "$behind" | wc -l | tr -d ' ')"
+    git pull --rebase origin main >/dev/null 2>&1 || return 1
+    printf 'pulled %s commit(s) from origin/main\n' "$n"
+    return 0
+  fi
   [[ -z "$unpushed" ]] && return 0
   printf 'local main is ahead of origin/main; push these commits before starting a lane:\n%s\n' "$unpushed" >&2
   return 1
