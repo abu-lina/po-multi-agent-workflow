@@ -118,16 +118,16 @@ FALLBACK — if no skill above clearly covers a step: /using-agent-skills, then 
 Start with step 0 of lane.md and stop at any "stop and ask" condition. Before stopping, comment on the issue so the foreman is notified.' "$issue"
 }
 
-# Print the rex split command to open a lane pane for the given agent.
-# Side effect for devin: writes a temp sandbox config and prints its path in the command.
-_lane_rex_cmd() {
+# Build the agent CLI command string for use inside a rex pane.
+# Side effect for devin: writes a temp sandbox config.
+_lane_agent_cmd() {
   local agent="$1" model="${2:-}" dir="$3"
-  local root agent_cmd model_flag=""
+  local model_flag=""
 
   case "$agent" in
     claude)
       [[ -n "$model" ]] && model_flag=" --model $(printf '%q' "$model")"
-      printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %q && claude%s"\n' "$dir" "$model_flag"
+      printf 'cd %q && claude%s' "$dir" "$model_flag"
       ;;
     copilot)
       local -a flags=(
@@ -165,12 +165,11 @@ _lane_rex_cmd() {
       fi
       local quoted_flags
       quoted_flags="$(printf '%q ' "${flags[@]}")"
-      printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %q && copilot %s"\n' \
-        "$dir" "$quoted_flags"
+      printf 'cd %q && copilot %s' "$dir" "$quoted_flags"
       ;;
     devin)
+      local root git_common_dir config_dir config_file
       root="$(git rev-parse --show-toplevel)" || return 1
-      local git_common_dir config_dir config_file
       git_common_dir="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)" ||
         { echo "could not resolve the repository's git common directory" >&2; return 1; }
       config_dir="$(mktemp -d "${TMPDIR:-/tmp}/lane-config.XXXXXX")" || return 1
@@ -195,15 +194,64 @@ _lane_rex_cmd() {
       [[ -n "$model" ]] && flags+=(--model "$model")
       local quoted_flags
       quoted_flags="$(printf '%q ' "${flags[@]}")"
-      printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %q && devin %s"\n' \
-        "$dir" "$quoted_flags"
+      printf 'cd %q && devin %s' "$dir" "$quoted_flags"
       ;;
     opencode)
       # shortcut: opencode CLI flags TBD; update once opencode CLI stabilises
       [[ -n "$model" ]] && model_flag=" --model $(printf '%q' "$model")"
-      printf 'rex split -s "$REX_SESSION" --split=right -- bash -c "cd %q && opencode%s"\n' "$dir" "$model_flag"
+      printf 'cd %q && opencode%s' "$dir" "$model_flag"
       ;;
   esac
+}
+
+# Open a rex pane for the given agent, write LANE_BLOCK to env_file,
+# poll until the shell prompt appears, then send the brief.
+_lane_rex_open() {
+  local agent="$1" model="$2" dir="$3" env_file="$4" issue="$5"
+  local agent_cmd block_id brief
+
+  agent_cmd="$(_lane_agent_cmd "$agent" "$model" "$dir")" || return 1
+
+  local split_json
+  split_json="$(rex split -s "$REX_SESSION" --split=right --json -- bash -c "$agent_cmd")" ||
+    { printf 'rex split failed\n' >&2; return 1; }
+  block_id="$(printf '%s\n' "$split_json" | jq -r '.block_ids[0]')" ||
+    { printf 'could not parse block_ids from rex split output: %s\n' "$split_json" >&2; return 1; }
+  [[ -n "$block_id" && "$block_id" != "null" ]] ||
+    { printf 'rex split returned no block id; output: %s\n' "$split_json" >&2; return 1; }
+  [[ "$block_id" =~ ^[a-zA-Z0-9_:-]+$ ]] ||
+    { printf 'rex split returned invalid block_id: %s\n' "$block_id" >&2; return 1; }
+
+  printf 'LANE_BLOCK=%s\n' "$block_id" >> "$env_file" ||
+    { printf 'could not write LANE_BLOCK to %s\n' "$env_file" >&2; return 1; }
+
+  # Poll until the shell prompt appears (30 s max, 1 s interval).
+  local i=0
+  while (( i < 30 )); do
+    local capture
+    capture="$(rex capture -s "$REX_SESSION" -b "$block_id" 2>/dev/null)" || true
+    if printf '%s\n' "$capture" | grep -q '❯'; then
+      break
+    fi
+    sleep 1
+    i=$(( i + 1 ))
+  done
+  (( i < 30 )) || { printf 'timed out waiting for prompt in block %s\n' "$block_id" >&2; return 1; }
+
+  # Send the brief via stdin so multi-line text is delivered as a single paste,
+  # not as individual keystrokes (newlines would fire Enter prematurely).
+  _lane_prompt "$issue" | rex send -s "$REX_SESSION" -b "$block_id" || return 1
+
+  # Give the terminal time to render before checking for the expansion prompt.
+  sleep 1
+  local post_send
+  post_send="$(rex capture -s "$REX_SESSION" -b "$block_id" 2>/dev/null)" || true
+  if printf '%s\n' "$post_send" | grep -q 'paste again to expand'; then
+    rex send-key -s "$REX_SESSION" -b "$block_id" enter || return 1
+  fi
+
+  rex send-key -s "$REX_SESSION" -b "$block_id" enter || return 1
+  printf 'lane #%s: brief sent to block %s\n' "$issue" "$block_id"
 }
 
 lane() {
@@ -211,6 +259,12 @@ lane() {
   [[ -z "$issue" ]] && { echo "usage: lane <issue> [slug] [claude|copilot|devin|opencode] [model|effort]" >&2; return 1; }
   [[ "$agent" == claude || "$agent" == copilot || "$agent" == devin || "$agent" == opencode ]] ||
     { echo "agent must be claude, copilot, devin, or opencode" >&2; return 1; }
+
+  [[ -n "${REX_SESSION:-}" ]] || { printf 'REX_SESSION is not set; run lane from a Rex terminal\n' >&2; return 1; }
+  [[ -n "${REX_BLOCK:-}" ]] || { printf 'REX_BLOCK is not set; run lane from a Rex terminal\n' >&2; return 1; }
+  [[ "${REX_SESSION:-}" =~ ^[a-zA-Z0-9_:-]+$ ]] || { printf 'REX_SESSION contains invalid characters\n' >&2; return 1; }
+  [[ "${REX_BLOCK:-}" =~ ^[a-zA-Z0-9_:-]+$ ]] || { printf 'REX_BLOCK contains invalid characters\n' >&2; return 1; }
+  [[ "$issue" =~ ^[0-9]+$ ]] || { printf 'issue must be a positive integer\n' >&2; return 1; }
 
   local root dir branch port base
   root="$(_lane_root)" || { echo "not inside a git repo" >&2; return 1; }
@@ -220,7 +274,7 @@ lane() {
   if [[ -n "$dir" ]]; then
     branch="$(git -C "$dir" branch --show-current)"
     printf 'lane #%s: %s on %s\n' "$issue" "$dir" "$branch"
-    _lane_rex_cmd "$agent" "$model" "$dir"
+    _lane_rex_open "$agent" "$model" "$dir" "$dir/.env.lane" "$issue"
     return 0
   fi
 
@@ -252,11 +306,9 @@ lane() {
 PORT=$port
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:$port
 ISSUE=$issue
-REX_SESSION_ID=${REX_SESSION:-}
-FOREMAN_BLOCK=${REX_BLOCK:-}
+REX_SESSION_ID=${REX_SESSION}
+FOREMAN_BLOCK=${REX_BLOCK}
 EOF
-
-  [[ -n "${REX_BLOCK:-}" ]] || printf 'warning: REX_BLOCK not set; lane signals will not reach the foreman\n' >&2
 
   if [[ -d "$root/node_modules" ]]; then
     cp -c -R "$root/node_modules" "$dir/node_modules" 2>/dev/null ||
@@ -265,7 +317,7 @@ EOF
   fi
   _lane_setup_hooks "$root" "$dir" || { echo "could not copy git hooks into $dir" >&2; return 1; }
   printf 'lane #%s: %s on %s, port %s\n' "$issue" "$dir" "$branch" "$port"
-  _lane_rex_cmd "$agent" "$model" "$dir"
+  _lane_rex_open "$agent" "$model" "$dir" "$dir/.env.lane" "$issue"
 }
 
 lane_register() {
@@ -376,3 +428,18 @@ lane_status() {
     esac
   done <<<"$worktrees"
 }
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  command="${1:-}"
+  [[ $# -gt 0 ]] && shift
+  case "$command" in
+    status) lane_status "$@" ;;
+    start)  lane "$@" ;;
+    done)   lane_done "$@" ;;
+    register) lane_register "$@" ;;
+    *)
+      printf 'usage: scripts/lane.sh {status|start <issue> <slug> [agent] [model]|register <issue> <block_id>|done <issue> [--force]}\n' >&2
+      exit 2
+      ;;
+  esac
+fi
