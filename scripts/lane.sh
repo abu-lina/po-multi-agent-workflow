@@ -122,7 +122,7 @@ Start with step 0 of lane.md and stop at any "stop and ask" condition. Before st
 # Side effect for devin: writes a temp sandbox config.
 _lane_agent_cmd() {
   local agent="$1" model="${2:-}" dir="$3"
-  local root model_flag=""
+  local model_flag=""
 
   case "$agent" in
     claude)
@@ -168,8 +168,8 @@ _lane_agent_cmd() {
       printf 'cd %q && copilot %s' "$dir" "$quoted_flags"
       ;;
     devin)
+      local root git_common_dir config_dir config_file
       root="$(git rev-parse --show-toplevel)" || return 1
-      local git_common_dir config_dir config_file
       git_common_dir="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)" ||
         { echo "could not resolve the repository's git common directory" >&2; return 1; }
       config_dir="$(mktemp -d "${TMPDIR:-/tmp}/lane-config.XXXXXX")" || return 1
@@ -428,3 +428,18 @@ lane_status() {
     esac
   done <<<"$worktrees"
 }
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  command="${1:-}"
+  [[ $# -gt 0 ]] && shift
+  case "$command" in
+    status) lane_status "$@" ;;
+    start)  lane "$@" ;;
+    done)   lane_done "$@" ;;
+    register) lane_register "$@" ;;
+    *)
+      printf 'usage: scripts/lane.sh {status|start <issue> <slug> [agent] [model]|register <issue> <block_id>|done <issue> [--force]}\n' >&2
+      exit 2
+      ;;
+  esac
+fi

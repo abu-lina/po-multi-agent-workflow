@@ -244,6 +244,21 @@ check "rex send was called (brief was sent)" \
 cleanup
 
 # ------------------------------------------------------------------
+# AC1+AC5: bash scripts/lane.sh start ... runs the full sequence (direct invocation)
+
+make_main_repo
+make_stubs
+export PATH="$stub_dir:$PATH"
+mkdir -p "$main_dir/.worktrees"
+out="$(cd "$main_dir" && REX_SESSION="session:foreman-1" REX_BLOCK="block:foreman-1" bash "$LANE_SH" start 42 direct-slug 2>&1)" || true
+env_file="$main_dir/.worktrees/42-direct-slug/.env.lane"
+check "direct bash scripts/lane.sh: LANE_BLOCK written" \
+  "$(grep -q '^LANE_BLOCK=' "$env_file" 2>/dev/null && echo 1 || echo 0)" "out=$out"
+check "direct bash scripts/lane.sh: no rex split printed" \
+  "$(echo "$out" | grep -qv 'rex split' && echo 1 || echo 0)" "out=$out"
+cleanup
+
+# ------------------------------------------------------------------
 # AC: lane status and lane done are unaffected (do not require REX_SESSION/REX_BLOCK)
 # lane_status() is called by scripts/lane status; test it directly via the lane bin
 
