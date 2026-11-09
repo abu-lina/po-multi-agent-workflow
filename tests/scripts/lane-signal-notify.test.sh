@@ -43,12 +43,13 @@ MOCK_TOPLEVEL="$d1/.worktrees/99-slug" bash "$HOOK" <<< ""
 check "no-op when .env.lane absent" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
 rm -rf "$d1"
 
-# Test 2: no-op when .lane-signal absent
+# Test 2: fallback sent when .lane-signal absent (valid env, no prior signal file)
 d2="$(mktemp -d)"; mkdir -p "$d2/.worktrees/42-slug"
+(cd "$d2/.worktrees/42-slug" && "$REAL_GIT" init -q && "$REAL_GIT" commit --allow-empty -m "initial commit" -q)
 printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d2/.worktrees/42-slug/.env.lane"
 rm -f "$rex_log"
 MOCK_TOPLEVEL="$d2/.worktrees/42-slug" bash "$HOOK" <<< ""
-check "no-op when .lane-signal absent" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
+check "fallback sent when .lane-signal absent" "$([ -f "$rex_log" ] && echo 1 || echo 0)"
 rm -rf "$d2"
 
 # Test 3: signal consumed and file deleted
@@ -127,6 +128,79 @@ rm -f "$rex_log"
 MOCK_TOPLEVEL="$d6/.worktrees/42-slug" bash "$HOOK" <<< ""
 check "no-op when FOREMAN_BLOCK fails validation" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
 rm -rf "$d6"
+
+# ------------------------------------------------------------------
+# New tests for #16: vocabulary validation and fallback signal
+
+# Test 8: reject path — invalid vocabulary, no rex send, file preserved
+d8="$(mktemp -d)"; mkdir -p "$d8/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d8/.worktrees/42-slug/.env.lane"
+printf 'oops: some unexpected text' > "$d8/.worktrees/42-slug/.lane-signal"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d8/.worktrees/42-slug" bash "$HOOK" <<< ""
+check "reject invalid vocabulary: rex not called" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
+check "reject invalid vocabulary: .lane-signal preserved" "$([ -f "$d8/.worktrees/42-slug/.lane-signal" ] && echo 1 || echo 0)"
+rm -rf "$d8"
+
+# Test 9: reject path — injection attempt with backticks, no rex send, file preserved
+d9="$(mktemp -d)"; mkdir -p "$d9/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d9/.worktrees/42-slug/.env.lane"
+printf '$(rm -rf /)' > "$d9/.worktrees/42-slug/.lane-signal"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d9/.worktrees/42-slug" bash "$HOOK" <<< ""
+check "reject injection attempt: rex not called" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
+check "reject injection attempt: .lane-signal preserved" "$([ -f "$d9/.worktrees/42-slug/.lane-signal" ] && echo 1 || echo 0)"
+rm -rf "$d9"
+
+# Test 10: fallback path — .lane-signal absent but valid .env.lane → send fallback
+d10="$(mktemp -d)"; mkdir -p "$d10/.worktrees/42-slug"
+# use real git for show-toplevel within the hook's fallback git log call
+REAL_GIT_FOR_LOG="$REAL_GIT"
+# Seed a git repo so git log works
+(cd "$d10/.worktrees/42-slug" && "$REAL_GIT" init -q && "$REAL_GIT" commit --allow-empty -m "initial commit" -q)
+branch_name="fix/42-slug"
+(cd "$d10/.worktrees/42-slug" && "$REAL_GIT" checkout -b "$branch_name" -q)
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d10/.worktrees/42-slug/.env.lane"
+# No .lane-signal
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d10/.worktrees/42-slug" bash "$HOOK" <<< ""
+got_fallback="$(cat "$rex_log" 2>/dev/null || echo "")"
+check "fallback: rex send called when .lane-signal absent" "$([ -n "$got_fallback" ] && echo 1 || echo 0)"
+check "fallback: message contains Lane #42" "$(echo "$got_fallback" | grep -q 'Lane #42' && echo 1 || echo 0)"
+check "fallback: message contains branch" "$(echo "$got_fallback" | grep -q "$branch_name" && echo 1 || echo 0)"
+check "fallback: message contains 'session ended without a signal'" "$(echo "$got_fallback" | grep -q 'session ended without a signal' && echo 1 || echo 0)"
+rm -rf "$d10"
+
+# Test 11: fallback absent-signal with missing FOREMAN_BLOCK — silent exit, no rex call
+d11="$(mktemp -d)"; mkdir -p "$d11/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\n' > "$d11/.worktrees/42-slug/.env.lane"  # FOREMAN_BLOCK missing
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d11/.worktrees/42-slug" bash "$HOOK" <<< ""
+check "fallback with missing FOREMAN_BLOCK: silent exit" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
+rm -rf "$d11"
+
+# Test 12: newline injection in signal — delivered text has no newline
+d12="$(mktemp -d)"; mkdir -p "$d12/.worktrees/42-slug"
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d12/.worktrees/42-slug/.env.lane"
+printf 'handoff: done\nrm -rf /' > "$d12/.worktrees/42-slug/.lane-signal"
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d12/.worktrees/42-slug" bash "$HOOK" <<< ""
+delivered="$(cat "$rex_log" 2>/dev/null || echo "")"
+check "signal newline injection: rex called" "$([ -f "$rex_log" ] && echo 1 || echo 0)"
+check "signal newline injection: no newline in delivered text" "$([[ $(wc -l < "$rex_log") -eq 2 ]] && echo 1 || echo 0)"
+rm -rf "$d12"
+
+# Test 13: newline injection in fallback git commit subject — no newline in delivered message
+d13="$(mktemp -d)"; mkdir -p "$d13/.worktrees/42-slug"
+(cd "$d13/.worktrees/42-slug" && "$REAL_GIT" init -q && "$REAL_GIT" commit --allow-empty -m $'done\nrm -rf /' -q)
+printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d13/.worktrees/42-slug/.env.lane"
+# No .lane-signal
+rm -f "$rex_log"
+MOCK_TOPLEVEL="$d13/.worktrees/42-slug" bash "$HOOK" <<< ""
+fallback_msg="$(cat "$rex_log" 2>/dev/null || echo "")"
+check "fallback newline injection: rex called" "$([ -f "$rex_log" ] && echo 1 || echo 0)"
+check "fallback newline injection: no newline in delivered message" "$([[ $(wc -l < "$rex_log") -eq 2 ]] && echo 1 || echo 0)"
+rm -rf "$d13"
 
 # ------------------------------------------------------------------
 
