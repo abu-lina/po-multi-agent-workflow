@@ -90,6 +90,29 @@ check "diverged: local main unchanged" "$([ "$local_sha_before" = "$local_sha_af
 rm -rf "$local_dir" "$origin_dir"
 
 # ------------------------------------------------------------------
+# Guard: dirty working tree — exits 1 with uncommitted changes message
+
+make_repos
+echo "untracked" > "$local_dir/dirty.txt"
+out="$(run_check "$local_dir")"
+rc=$?
+check "dirty tree: exits 1" "$([ $rc -eq 1 ] && echo 1 || echo 0)"
+check "dirty tree: mentions uncommitted changes" "$(echo "$out" | grep -qi 'uncommitted' && echo 1 || echo 0)"
+rm -rf "$local_dir" "$origin_dir"
+
+# ------------------------------------------------------------------
+# Guard: pre-existing REBASE_HEAD — exits 1 with mid-rebase message
+
+make_repos
+git_dir="$(cd "$local_dir" && "$REAL_GIT" rev-parse --git-dir)"
+touch "$local_dir/$git_dir/REBASE_HEAD"
+out="$(run_check "$local_dir")"
+rc=$?
+check "REBASE_HEAD: exits 1" "$([ $rc -eq 1 ] && echo 1 || echo 0)"
+check "REBASE_HEAD: mentions mid-rebase" "$(echo "$out" | grep -qi 'rebase' && echo 1 || echo 0)"
+rm -rf "$local_dir" "$origin_dir"
+
+# ------------------------------------------------------------------
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

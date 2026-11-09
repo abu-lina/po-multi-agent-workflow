@@ -42,7 +42,16 @@ _lane_base() {
 }
 
 _lane_check_main() {
-  local unpushed behind
+  local unpushed behind git_dir
+  git_dir="$(git rev-parse --git-dir)" || return 1
+  if [[ -f "$git_dir/REBASE_HEAD" || -f "$git_dir/MERGE_HEAD" ]]; then
+    printf 'main checkout is in mid-rebase/merge state; resolve it before starting a lane\n' >&2
+    return 1
+  fi
+  if [[ -n "$(git status --porcelain)" ]]; then
+    printf 'main checkout has uncommitted changes; commit or stash before starting a lane\n' >&2
+    return 1
+  fi
   unpushed="$(git log --oneline origin/main..main)" || return 1
   behind="$(git log --oneline main..origin/main)" || return 1
   if [[ -n "$unpushed" && -n "$behind" ]]; then
@@ -52,7 +61,10 @@ _lane_check_main() {
   if [[ -n "$behind" ]]; then
     local n
     n="$(printf '%s\n' "$behind" | wc -l | tr -d ' ')"
-    git pull --rebase origin main >/dev/null 2>&1 || return 1
+    if ! git pull --rebase origin main >/dev/null; then
+      printf 'git pull --rebase origin main failed; resolve manually\n' >&2
+      return 1
+    fi
     printf 'pulled %s commit(s) from origin/main\n' "$n"
     return 0
   fi

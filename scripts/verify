@@ -15,6 +15,6 @@
 
 set -euo pipefail
 
-npx vitest run
-bash tests/scripts/lane-signal-notify.test.sh
-bash tests/scripts/lane-check-main.test.sh
+# TODO: replace with your project's verify commands
+echo "scripts/verify: no commands configured. Edit this file to add your project's check commands." >&2
+exit 1
