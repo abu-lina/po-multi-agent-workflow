@@ -78,7 +78,7 @@ The foreman handles every mechanical step — from idea detection through auto-m
 >
 > *Incident 2026-11-08 (#874):* UI lane brief omitted desktop layout and all states. Required 6+ reactive fix cycles after PO saw the page. All issues were predictable from a 10-minute upfront pass.
 3. Pick agent and tier, then propose to the PO:
-   - **Strong** (`claude`, `copilot`, or `devin`): 6+ ACs, security/data-sensitive, cross-cutting refactor, expected diff > 200 non-test lines. Default to `claude`.
+   - **Strong** (`claude` or `copilot`): 6+ ACs, security/data-sensitive, cross-cutting refactor, expected diff > 200 non-test lines. Default to `claude`.
    - **Cheap** (`opencode`): everything else — config, scripts, docs, 5 or fewer ACs.
 
    Propose in chat: "Starting lane #`<issue>` with `<agent>`. `<one-line reason>`. OK to proceed?"
