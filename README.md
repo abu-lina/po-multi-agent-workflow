@@ -24,7 +24,7 @@ Verify: `claude plugin list | grep mattpocock`
 ### CLI tools
 
 - `gh` — GitHub CLI, authenticated (`gh auth login`)
-- `herdr` — agent and workspace management (`herdr --version`)
+- `rex` — terminal session management (`rex --version`)
 - `jq`
 
 ## Setup for a new project
@@ -51,7 +51,7 @@ When the workflow improves, pull changes into your project:
 bash scripts/sync-workflow.sh
 ```
 
-This updates `docs/agents/lane.md`, `foreman.md`, `pr-loop.md`, the `scripts/`, and `.devin/foreman.json`. It never overwrites `AGENTS.md`, `scripts/verify`, or `docs/agents/review.md`.
+This updates `docs/agents/lane.md`, `foreman.md`, `pr-loop.md`, and the `scripts/`. It never overwrites `AGENTS.md`, `scripts/verify`, or `docs/agents/review.md`.
 
 ## Workflow overview
 
@@ -78,4 +78,3 @@ For orchestrating multiple parallel lanes: `docs/agents/foreman.md`.
 | `scripts/lane.sh` | Shell helpers (source from `~/.zshrc`) |
 | `scripts/lane` | Executable wrapper for agent shells |
 | `scripts/verify` | Your project's check commands |
-| `.devin/foreman.json` | Devin permission rules for the foreman |
