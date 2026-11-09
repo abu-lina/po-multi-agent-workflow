@@ -7,8 +7,7 @@
 #
 #   scripts/review-bundle <pr-number>
 #
-# .devin/foreman.json allows Exec(scripts/review-bundle) with any arguments, so
-# the argument check below is the only guard.
+# the argument check below is the only guard on input passed to gh commands
 
 set -uo pipefail
 
