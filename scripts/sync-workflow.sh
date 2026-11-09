@@ -19,6 +19,7 @@
 #   .claude/hooks/fixed-proof-gate.sh
 #   .claude/hooks/post-write-check.sh
 #   .claude/hooks/on-stop-nudge.sh
+#   scripts/hooks/lane-signal-notify.sh
 #   scripts/sync-workflow.sh
 #
 # INIT-ONLY files are copied only on --init (never overwritten after that):
@@ -50,6 +51,7 @@ SYNC_FILES=(
   .claude/hooks/on-stop-nudge.sh
   .claude/hooks/idea-detection-nudge.sh
   .claude/hooks/review-dispatch-nudge.sh
+  scripts/hooks/lane-signal-notify.sh
   scripts/sync-workflow.sh
 )
 
