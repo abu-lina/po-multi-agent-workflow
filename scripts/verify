@@ -17,3 +17,4 @@ set -euo pipefail
 
 bash scripts/test-ui-taste-gate.sh
 bash scripts/test-lane-done-gh-host.sh
+bash scripts/test-lane-env-lane.sh
