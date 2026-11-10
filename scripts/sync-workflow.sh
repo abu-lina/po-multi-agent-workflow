@@ -51,6 +51,7 @@ SYNC_FILES=(
   .claude/hooks/on-stop-nudge.sh
   .claude/hooks/idea-detection-nudge.sh
   .claude/hooks/review-dispatch-nudge.sh
+  .claude/hooks/sync-workflow-on-start.sh
   .claude/hooks/ui-taste-gate.sh
   .claude/hooks/strip-attribution.sh
   scripts/hooks/lane-signal-notify.sh
