@@ -356,7 +356,8 @@ lane_done() {
     local state
     state="$(GH_HOST="" gh pr view "$branch" --json state --jq .state 2>/dev/null)"
     [[ "$state" != "MERGED" ]] && { echo "PR for $branch is '${state:-missing}', not MERGED. Use --force only after the owner agrees." >&2; return 1; }
-    [[ -n "$(git -C "$dir" status --porcelain | grep -v '^?? \.env\.lane$')" ]] && { echo "$dir has uncommitted changes" >&2; return 1; }
+    # .worktrees/ is excluded via .gitignore; only .env.lane needs explicit grep exclusion
+    [[ -n "$(git -C "$dir" status --porcelain | grep -Ev '^.. \.env\.lane$')" ]] && { echo "$dir has uncommitted changes" >&2; return 1; }
     if git -C "$root" rev-parse --verify -q "origin/$branch" >/dev/null; then
       [[ -n "$(git -C "$root" log "origin/$branch..$branch" --oneline)" ]] && { echo "$dir has unpushed commits" >&2; return 1; }
     fi

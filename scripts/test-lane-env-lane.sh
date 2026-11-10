@@ -79,7 +79,7 @@ stub_dir="$(make_stub_gh)"
 make_repos
 wt_dir="$local_dir/.worktrees/7777-test-slug"
 "$REAL_GIT" -C "$local_dir" worktree add -q "$wt_dir" -b chore/7777-test-slug
-printf 'PORT=7777\n' > "$wt_dir/.env.lane"
+printf 'PORT=3777\n' > "$wt_dir/.env.lane"
 
 out="$(cd "$local_dir" && PATH="$stub_dir:$PATH" bash -c 'source "$1"; lane_done 7777' _ "$LANE_SH" 2>&1)"
 rc=$?
@@ -95,7 +95,7 @@ stub_dir="$(make_stub_gh)"
 make_repos
 wt_dir="$local_dir/.worktrees/7778-test-slug"
 "$REAL_GIT" -C "$local_dir" worktree add -q "$wt_dir" -b chore/7778-test-slug
-printf 'PORT=7778\n' > "$wt_dir/.env.lane"
+printf 'PORT=3778\n' > "$wt_dir/.env.lane"
 echo "dirty" > "$wt_dir/untracked.txt"
 
 out="$(cd "$local_dir" && PATH="$stub_dir:$PATH" bash -c 'source "$1"; lane_done 7778' _ "$LANE_SH" 2>&1)"
