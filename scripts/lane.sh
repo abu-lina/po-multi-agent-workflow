@@ -48,7 +48,7 @@ _lane_check_main() {
     printf 'main checkout is in mid-rebase/merge state; resolve it before starting a lane\n' >&2
     return 1
   fi
-  if [[ -n "$(git status --porcelain)" ]]; then
+  if [[ -n "$(git status --porcelain | grep -v '^?? \.worktrees/$')" ]]; then
     printf 'main checkout has uncommitted changes; commit or stash before starting a lane\n' >&2
     return 1
   fi
@@ -356,7 +356,7 @@ lane_done() {
     local state
     state="$(GH_HOST="" gh pr view "$branch" --json state --jq .state 2>/dev/null)"
     [[ "$state" != "MERGED" ]] && { echo "PR for $branch is '${state:-missing}', not MERGED. Use --force only after the owner agrees." >&2; return 1; }
-    [[ -n "$(git -C "$dir" status --porcelain)" ]] && { echo "$dir has uncommitted changes" >&2; return 1; }
+    [[ -n "$(git -C "$dir" status --porcelain | grep -v '^?? \.env\.lane$')" ]] && { echo "$dir has uncommitted changes" >&2; return 1; }
     if git -C "$root" rev-parse --verify -q "origin/$branch" >/dev/null; then
       [[ -n "$(git -C "$root" log "origin/$branch..$branch" --oneline)" ]] && { echo "$dir has unpushed commits" >&2; return 1; }
     fi
