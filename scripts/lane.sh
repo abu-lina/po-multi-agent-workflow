@@ -354,7 +354,7 @@ lane_done() {
 
   if [[ "$force" != "--force" ]]; then
     local state
-    state="$(gh pr view "$branch" --json state --jq .state 2>/dev/null)"
+    state="$(GH_HOST="" gh pr view "$branch" --json state --jq .state 2>/dev/null)"
     [[ "$state" != "MERGED" ]] && { echo "PR for $branch is '${state:-missing}', not MERGED. Use --force only after the owner agrees." >&2; return 1; }
     [[ -n "$(git -C "$dir" status --porcelain)" ]] && { echo "$dir has uncommitted changes" >&2; return 1; }
     if git -C "$root" rev-parse --verify -q "origin/$branch" >/dev/null; then
