@@ -103,6 +103,22 @@ else
   ok "AC3b: fail-open when jq absent"
 fi
 
+# AC1c: Co-Authored-By on a real newline (not \n escape) also stripped
+# This covers the form produced when Claude Code uses heredoc-style serialisation.
+real_newline_cmd=$(printf 'git commit -m "fix: thing\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"')
+input_rn=$(jq -n --arg cmd "$real_newline_cmd" '{"tool_name":"Bash","tool_input":{"command":$cmd}}')
+out_rn=$(printf '%s' "$input_rn" | bash "$HOOK" 2>&1)
+if printf '%s' "$out_rn" | grep -q '"updatedInput"'; then
+  updated_rn=$(printf '%s' "$out_rn" | jq -r '.hookSpecificOutput.updatedInput.command')
+  if printf '%s' "$updated_rn" | grep -qi 'Co-Authored-By'; then
+    flunk "AC1c: Co-Authored-By still present after stripping real-newline form"
+  else
+    ok "AC1c: Co-Authored-By stripped when embedded as real newline"
+  fi
+else
+  flunk "AC1c: expected updatedInput for commit with real-newline Co-Authored-By, got: $out_rn"
+fi
+
 echo ""
 echo "Results: $pass passed, $fail_count failed"
 [[ "$fail_count" -eq 0 ]]
