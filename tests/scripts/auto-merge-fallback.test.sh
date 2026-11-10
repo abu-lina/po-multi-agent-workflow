@@ -2,7 +2,7 @@
 # Tests for issue #31: auto-merge fallback when branch protection is absent.
 # Run directly: bash tests/scripts/auto-merge-fallback.test.sh
 
-set -uo pipefail
+set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FOREMAN_MD="$REPO_ROOT/docs/agents/foreman.md"

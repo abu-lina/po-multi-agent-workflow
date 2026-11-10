@@ -166,10 +166,10 @@ If code review forces a fix:
    ```
 2. Set auto-merge immediately:
    ```bash
-   GH_HOST="" gh pr merge $PR --auto --squash \
+   GH_HOST="" gh pr merge $PR --auto --squash 2>/dev/null \
      || echo "Auto-merge unavailable — merge PR #$PR manually when ready"
    ```
-   Auto-merge requires branch protection with at least one required status check. If the repo has no required checks configured, GitHub will reject the call even if "Allow auto-merge" is enabled in repo settings — the fallback prints a warning and continues. GitHub merges when all required status checks pass. No agent stays alive to watch.
+   Auto-merge requires branch protection with at least one required status check. If the repo has no required checks configured, GitHub will reject the call even if "Allow auto-merge" is enabled in repo settings; the fallback prints a warning and continues. GitHub merges when all required status checks pass. No agent stays alive to watch.
 
 3. **On merge event:** foreman auto-rebases all other active lanes:
    ```bash
