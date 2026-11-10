@@ -5,7 +5,8 @@
 LANE_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lane.sh"
 [[ -f "$LANE_SH" ]] || { echo "MISSING: $LANE_SH" >&2; exit 1; }
 
-PASS=0; FAIL=0
+PASS=0
+FAIL=0
 pass() { echo "PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
 check() { local label="$1" ok="$2"; [[ "$ok" == "1" ]] && pass "$label" || fail "$label"; }
@@ -27,13 +28,29 @@ make_repos() {
 
 run_check_main() {
   local dir="$1"
-  (cd "$dir" && bash -c "source '$LANE_SH'; _lane_check_main" 2>&1)
+  # Pass LANE_SH as argument to avoid single-quote injection in string interpolation.
+  (cd "$dir" && bash -c 'source "$1"; _lane_check_main' _ "$LANE_SH" 2>&1)
+}
+
+make_stub_gh() {
+  local d
+  d="$(mktemp -d)"
+  cat > "$d/gh" <<'EOF'
+#!/usr/bin/env bash
+printf 'MERGED\n'
+EOF
+  chmod +x "$d/gh"
+  echo "$d"
 }
 
 # ------------------------------------------------------------------
 # AC: lane_start succeeds when .worktrees/ is the only untracked item
+# (.gitignore suppresses .worktrees/ entirely; _lane_check_main sees nothing)
 
 make_repos
+# Commit .gitignore (as the project does) so it doesn't appear as untracked itself.
+echo ".worktrees/" > "$local_dir/.gitignore"
+(cd "$local_dir" && "$REAL_GIT" add .gitignore && "$REAL_GIT" commit -q -m "chore: add .gitignore" && "$REAL_GIT" push -q)
 mkdir -p "$local_dir/.worktrees/30-some-slug"
 touch "$local_dir/.worktrees/30-some-slug/.gitkeep"
 out="$(run_check_main "$local_dir")"
@@ -56,22 +73,15 @@ rm -rf "$local_dir" "$origin_dir"
 # ------------------------------------------------------------------
 # AC: lane_done succeeds when .env.lane is the only untracked file
 #
-# lane_done calls `gh pr view` to check state; stub gh on PATH to return MERGED.
-# _lane_dir finds a worktree by issue number; set up a fake worktree structure.
+# lane_done calls `gh pr view`; stub gh on PATH to return MERGED.
 
-stub_dir="$(mktemp -d)"
-cat > "$stub_dir/gh" <<'EOF'
-#!/usr/bin/env bash
-printf 'MERGED\n'
-EOF
-chmod +x "$stub_dir/gh"
-
+stub_dir="$(make_stub_gh)"
 make_repos
 wt_dir="$local_dir/.worktrees/7777-test-slug"
 "$REAL_GIT" -C "$local_dir" worktree add -q "$wt_dir" -b chore/7777-test-slug
 printf 'PORT=7777\n' > "$wt_dir/.env.lane"
 
-out="$(cd "$local_dir" && PATH="$stub_dir:$PATH" bash -c "source '$LANE_SH'; lane_done 7777" 2>&1)"
+out="$(cd "$local_dir" && PATH="$stub_dir:$PATH" bash -c 'source "$1"; lane_done 7777' _ "$LANE_SH" 2>&1)"
 rc=$?
 check "lane_done: .env.lane only → exits 0" "$([ $rc -eq 0 ] && echo 1 || echo 0)"
 check "lane_done: .env.lane only → no uncommitted error" "$(echo "$out" | grep -qvi 'uncommitted' && echo 1 || echo 0)"
@@ -81,20 +91,14 @@ rm -rf "$local_dir" "$origin_dir" "$stub_dir"
 # ------------------------------------------------------------------
 # AC: other genuinely uncommitted changes still block lane_done
 
-stub_dir="$(mktemp -d)"
-cat > "$stub_dir/gh" <<'EOF'
-#!/usr/bin/env bash
-printf 'MERGED\n'
-EOF
-chmod +x "$stub_dir/gh"
-
+stub_dir="$(make_stub_gh)"
 make_repos
 wt_dir="$local_dir/.worktrees/7778-test-slug"
 "$REAL_GIT" -C "$local_dir" worktree add -q "$wt_dir" -b chore/7778-test-slug
 printf 'PORT=7778\n' > "$wt_dir/.env.lane"
 echo "dirty" > "$wt_dir/untracked.txt"
 
-out="$(cd "$local_dir" && PATH="$stub_dir:$PATH" bash -c "source '$LANE_SH'; lane_done 7778" 2>&1)"
+out="$(cd "$local_dir" && PATH="$stub_dir:$PATH" bash -c 'source "$1"; lane_done 7778' _ "$LANE_SH" 2>&1)"
 rc=$?
 check "lane_done: other untracked file → exits 1" "$([ $rc -eq 1 ] && echo 1 || echo 0)"
 check "lane_done: other untracked file → mentions uncommitted" "$(echo "$out" | grep -qi 'uncommitted' && echo 1 || echo 0)"

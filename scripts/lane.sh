@@ -48,7 +48,7 @@ _lane_check_main() {
     printf 'main checkout is in mid-rebase/merge state; resolve it before starting a lane\n' >&2
     return 1
   fi
-  if [[ -n "$(git status --porcelain | grep -v '^?? \.worktrees/$')" ]]; then
+  if [[ -n "$(git status --porcelain)" ]]; then
     printf 'main checkout has uncommitted changes; commit or stash before starting a lane\n' >&2
     return 1
   fi
