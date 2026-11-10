@@ -99,6 +99,19 @@ _lane_type() {
   esac
 }
 
+# Default Claude model when none is specified. Heavier work gets a stronger model.
+# No-op for non-Claude agents (copilot/devin/opencode control their own models).
+_lane_default_model() {
+  local agent="$1" issue_type="$2"
+  [[ "$agent" != "claude" ]] && return 0
+  case "$issue_type" in
+    feat|fix)    echo opus ;;
+    refactor)    echo opus ;;
+    chore)       echo sonnet ;;
+    *)           echo opus ;;
+  esac
+}
+
 _lane_prompt() {
   local issue="$1"
   printf 'You are a lane. Read AGENTS.md, then docs/agents/lane.md, then work on GitHub issue #%s.
@@ -273,13 +286,21 @@ lane() {
 
   if [[ -n "$dir" ]]; then
     branch="$(git -C "$dir" branch --show-current)"
+    if [[ -z "$model" ]]; then
+      local existing_type
+      existing_type="$(_lane_type "$issue")"
+      model="$(_lane_default_model "$agent" "$existing_type")"
+    fi
     printf 'lane #%s: %s on %s\n' "$issue" "$dir" "$branch"
     _lane_rex_open "$agent" "$model" "$dir" "$dir/.env.lane" "$issue"
     return 0
   fi
 
   [[ -z "$slug" ]] && { echo "new lane needs a slug: lane $issue <slug>" >&2; return 1; }
-  branch="$(_lane_type "$issue")/$issue-$slug"
+  local issue_type
+  issue_type="$(_lane_type "$issue")"
+  [[ -z "$model" ]] && model="$(_lane_default_model "$agent" "$issue_type")"
+  branch="$issue_type/$issue-$slug"
   dir="$root/.worktrees/$issue-$slug"
   base="$(_lane_base)" || return 1
   _lane_check_main || return 1
