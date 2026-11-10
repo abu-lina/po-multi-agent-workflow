@@ -68,7 +68,7 @@ The foreman handles every mechanical step — from idea detection through auto-m
 1. Run `mattpocock-skills:writing-for-agents` → produces the Lane Brief from the grilled spec + user stories.
 2. **Conditional** (complex issues: schema changes, new subsystems, multi-domain, P0/P1): run `superpowers:writing-plans` to produce a step-by-step implementation plan before the lane starts.
 
-> **HARD GATE — UI lanes must have a design brief before the lane starts:** If the lane touches any user-facing UI (admin tool, public page, component), invoke `ui-taste` and read `reference/operate.md` (admin/dashboard) or `reference/polish.md` (refinement) BEFORE writing the Lane Brief. The brief must specify all of the following — if any are missing, the brief is incomplete:
+> **HARD GATE — UI lanes must have a design brief before the lane starts:** If the lane touches any user-facing UI (admin tool, public page, component), invoke `ui-taste` and read both `reference/operate.md` and `reference/polish.md` BEFORE writing the Lane Brief. The brief must specify all of the following — if any are missing, the brief is incomplete:
 > - Mobile layout
 > - Desktop layout (or explicit note: "mobile-only, hidden on desktop")
 > - Loading state

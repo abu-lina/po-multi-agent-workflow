@@ -62,7 +62,7 @@ PO verifies on localhost. Any positive reply ("looks good", "ship it", "yes", "a
 | Every PR                                  | `mattpocock-skills:code-review`          | Auto. Standards + spec, two-axis.                                           |
 | Every PR                                  | `security-audit`                         | Auto. Run in addition to the above.                                         |
 | Every PR                                  | `pm-ai-shipping:security-audit-static`   | Static security analysis — runs alongside security-audit |
-| Frontend / UI lanes                       | `ui-taste`, `frontend-design`            | Auto for `area:ui`, `area:dashboard`, `area:admin`. `ui-taste` for aesthetic/UX quality; `frontend-design` mandatory before lane brief. |
+| Frontend / UI lanes                       | `ui-taste`, `frontend-design`            | Auto for `area:ui`, `area:map`, `area:dashboard`, `area:admin`. `ui-taste` for aesthetic/UX quality; `frontend-design` mandatory before lane brief. |
 | Frontend / UI lanes                       | `impeccable:impeccable-finish-reviewer`  | Auto for Frontend lanes. Correctness and completeness.                      |
 
 Dispatch all reviewers in parallel as subagents (Agent tool, fresh context, scoped to the diff). Wait for all results before opening the PR.
