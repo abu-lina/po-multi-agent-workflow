@@ -16,15 +16,11 @@ check() { local label="$1" ok="$2" detail="${3:-}"; [[ "$ok" == "1" ]] && pass "
 
 # AC1: Stage 6 must contain the fallback pattern (|| echo) so the foreman
 # continues rather than halting when auto-merge is unavailable.
-check "Stage 6 has fallback pattern (|| echo)" \
-  "$(grep -c '|| echo' "$FOREMAN_MD" || echo 0)" \
-  "expected '|| echo' in $FOREMAN_MD"
+grep -q '|| echo' "$FOREMAN_MD" && check "Stage 6 has fallback pattern (|| echo)" 1 || check "Stage 6 has fallback pattern (|| echo)" 0 "expected '|| echo' in $FOREMAN_MD"
 
 # AC2: Stage 6 must document the requirement (mention 'required' near the
 # auto-merge command) so a reader knows why it can fail.
-check "Stage 6 documents required-checks prerequisite" \
-  "$(grep -c 'required' "$FOREMAN_MD" || echo 0)" \
-  "expected 'required' in $FOREMAN_MD"
+grep -q 'required' "$FOREMAN_MD" && check "Stage 6 documents required-checks prerequisite" 1 || check "Stage 6 documents required-checks prerequisite" 0 "expected 'required' in $FOREMAN_MD"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
