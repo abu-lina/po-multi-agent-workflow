@@ -42,14 +42,12 @@ _lane_base() {
 }
 
 _lane_check_main() {
-  local unpushed behind git_dir
-  git_dir="$(git rev-parse --git-dir)" || return 1
-  if [[ -f "$git_dir/REBASE_HEAD" || -f "$git_dir/MERGE_HEAD" ]]; then
-    printf 'main checkout is in mid-rebase/merge state; resolve it before starting a lane\n' >&2
-    return 1
-  fi
-  if [[ -n "$(git status --porcelain)" ]]; then
-    printf 'main checkout has uncommitted changes; commit or stash before starting a lane\n' >&2
+  # The foreman may be on any branch; compare local main ref vs origin/main
+  # without requiring a clean working tree (the worktree is created from the
+  # remote branch, not from the checkout).
+  local unpushed behind
+  if ! git rev-parse --verify main >/dev/null 2>&1; then
+    printf 'no local main branch; run "git checkout main" once to create it\n' >&2
     return 1
   fi
   unpushed="$(git log --oneline origin/main..main)" || return 1
@@ -61,11 +59,9 @@ _lane_check_main() {
   if [[ -n "$behind" ]]; then
     local n
     n="$(printf '%s\n' "$behind" | wc -l | tr -d ' ')"
-    if ! git pull --rebase origin main >/dev/null; then
-      printf 'git pull --rebase origin main failed; resolve manually\n' >&2
-      return 1
-    fi
-    printf 'pulled %s commit(s) from origin/main\n' "$n"
+    git update-ref refs/heads/main origin/main ||
+      { printf 'could not fast-forward local main to origin/main\n' >&2; return 1; }
+    printf 'fast-forwarded local main by %s commit(s)\n' "$n"
     return 0
   fi
   [[ -z "$unpushed" ]] && return 0
