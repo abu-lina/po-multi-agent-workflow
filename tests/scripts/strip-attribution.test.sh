@@ -20,9 +20,8 @@ flunk() { echo "  FAIL: $1"; (( fail_count++ )) || true; }
 
 echo "--- strip-attribution tests ---"
 
-# AC1: Co-Authored-By line stripped from git commit -m
-msg_with_coauthor=$(printf 'fix: do the thing\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>')
-input=$(jq -n --arg cmd "git commit -m \"$(printf '%s' "$msg_with_coauthor" | sed 's/"/\\"/g')\"" \
+# AC1: Co-Authored-By line stripped from git commit -m (\\n escape form Claude Code emits)
+input=$(jq -n --arg cmd 'git commit -m "fix: do the thing\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"' \
   '{"tool_name":"Bash","tool_input":{"command":$cmd}}')
 out=$(printf '%s' "$input" | bash "$HOOK" 2>&1)
 if printf '%s' "$out" | grep -q '"updatedInput"'; then
@@ -33,7 +32,6 @@ if printf '%s' "$out" | grep -q '"updatedInput"'; then
     ok "AC1: Co-Authored-By stripped from git commit -m"
   fi
 else
-  # No rewrite output = hook found nothing to strip (fail)
   flunk "AC1: expected updatedInput for commit with Co-Authored-By, got: $out"
 fi
 
