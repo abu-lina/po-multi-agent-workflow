@@ -32,4 +32,5 @@ signal="$(tr -dc '[:print:]' < "$root/.lane-signal")"
 [[ "$signal" =~ $SIGNAL_VOCAB_RE ]] || exit 0
 
 rex send -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" "Lane #$ISSUE: $signal" 2>/dev/null &&
-  { rex send-key -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" enter 2>/dev/null; rm -f "$root/.lane-signal"; }
+  rex send-key -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" enter 2>/dev/null
+# Keep .lane-signal so repeated session exits don't re-trigger the no-signal nudge.
