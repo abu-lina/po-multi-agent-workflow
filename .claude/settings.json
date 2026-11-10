@@ -20,7 +20,8 @@
       "Bash(grep *)",
       "Bash(gh pr view *)",
       "Bash(gh pr diff *)",
-      "Bash(gh run view *)"
+      "Bash(gh run view *)",
+      "Bash(scripts/lane *)"
     ],
     "deny": [
       "Bash(git merge)",
@@ -32,6 +33,10 @@
       "Write(.env.local)",
       "Bash(gh pr merge)"
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "git branch --show-current 2>/dev/null"
   },
   "hooks": {
     "PreToolUse": [

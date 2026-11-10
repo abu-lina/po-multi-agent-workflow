@@ -45,7 +45,20 @@ _lane_check_main() {
   # The foreman may be on any branch; compare local main ref vs origin/main
   # without requiring a clean working tree (the worktree is created from the
   # remote branch, not from the checkout).
-  local unpushed behind
+  local git_dir unpushed behind
+  git_dir="$(git rev-parse --git-dir)" || return 1
+  for stale in REBASE_HEAD MERGE_HEAD; do
+    if [[ -f "$git_dir/$stale" ]]; then
+      rm -f "$git_dir/$stale"
+      printf 'removed stale %s from previous session\n' "$stale"
+    fi
+  done
+  for stale_dir in rebase-merge rebase-apply; do
+    if [[ -d "$git_dir/$stale_dir" ]]; then
+      rm -rf "$git_dir/$stale_dir"
+      printf 'removed stale %s/ from previous session\n' "$stale_dir"
+    fi
+  done
   if ! git rev-parse --verify main >/dev/null 2>&1; then
     printf 'no local main branch; run "git checkout main" once to create it\n' >&2
     return 1
@@ -301,7 +314,7 @@ lane() {
   base="$(_lane_base)" || return 1
   _lane_check_main || return 1
   if ! git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-    gh issue develop "$issue" --name "$branch" --base main >/dev/null || return 1
+    gh issue develop "$issue" --name "$branch" --base main || return 1
   fi
   git fetch -q origin "$branch" || return 1
   git worktree add "$dir" "$branch" || return 1

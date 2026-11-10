@@ -84,18 +84,18 @@ The foreman handles every mechanical step — from idea detection through auto-m
    Propose in chat: "Starting lane #`<issue>` with `<agent>`. `<one-line reason>`. OK to proceed?"
    Wait for explicit PO approval before continuing.
 
-4. Run `lane start` and paste the printed Rex command:
+4. Run the lane start command. This is the ONLY action after PO approval:
    ```bash
    scripts/lane start <issue> <slug> [agent]
    ```
-   The command prints a `rex split ...` command. Paste it into the terminal to open the lane pane.
-5. After `rex split` returns a block ID, register it with the lane:
-   ```bash
-   scripts/lane register <issue> <block_id>
-   ```
-   This appends `LANE_BLOCK=<block_id>` to the lane's `.env.lane`, so `lane done` can close the lane's pane when finished.
-6. Pass the Lane Brief as the lane's opening prompt.
-7. Stay as foreman. Never write code or edit source in this session.
+   The script handles everything: worktree, branch, Rex pane, block registration, and brief delivery. There are no manual steps after this command.
+5. Stay as foreman. Never write code or edit source in this session.
+
+> **HARD GATE — immediate execution after PO approval:** When the PO approves a lane start, the ONLY permitted next action is `scripts/lane start <issue> <slug> [agent]`. Do not read source files, do not clean git state, do not check permissions, do not search for commands. Run the script. If it fails, report the error to the PO.
+>
+> The foreman never reads `src/`, `app/`, or component files. Permitted reads: `AGENTS.md`, `docs/agents/`, issue bodies, and `scripts/`.
+>
+> *Incident 2026-11-10 (#877):* Foreman announced "Starting lane" then spent its entire context reading source files, cleaning stale git state, and searching for removed commands. Never ran the script.
 
 ## Stage 3 — Active implementation
 
@@ -203,12 +203,8 @@ Include the learning sentence in the PR body and final issue comment.
 **Starting a second lane while one is active:**
 
 1. Confirm no shared `area:*` labels with the existing lane.
-2. Run `scripts/lane start <issue> <slug>` for the new lane.
-3. Open a new Rex pane:
-   ```bash
-   rex split -s "$REX_SESSION" --split=right -- bash -c "cd .worktrees/<issue>-<slug> && claude"
-   ```
-4. Monitor both panes for Handoff and block signals.
+2. Run `scripts/lane start <issue> <slug>` for the new lane. The script opens the Rex pane and sends the brief automatically.
+3. Monitor both panes for Handoff and block signals.
 
 ## Blocked lane protocol
 
