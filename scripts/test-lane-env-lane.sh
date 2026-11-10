@@ -68,7 +68,7 @@ chmod +x "$stub_dir/gh"
 
 make_repos
 wt_dir="$local_dir/.worktrees/7777-test-slug"
-"$REAL_GIT" -C "$local_dir" worktree add -q --orphan "$wt_dir" -b chore/7777-test-slug
+"$REAL_GIT" -C "$local_dir" worktree add -q "$wt_dir" -b chore/7777-test-slug
 printf 'PORT=7777\n' > "$wt_dir/.env.lane"
 
 out="$(cd "$local_dir" && PATH="$stub_dir:$PATH" bash -c "source '$LANE_SH'; lane_done 7777" 2>&1)"
@@ -90,7 +90,7 @@ chmod +x "$stub_dir/gh"
 
 make_repos
 wt_dir="$local_dir/.worktrees/7778-test-slug"
-"$REAL_GIT" -C "$local_dir" worktree add -q --orphan "$wt_dir" -b chore/7778-test-slug
+"$REAL_GIT" -C "$local_dir" worktree add -q "$wt_dir" -b chore/7778-test-slug
 printf 'PORT=7778\n' > "$wt_dir/.env.lane"
 echo "dirty" > "$wt_dir/untracked.txt"
 
