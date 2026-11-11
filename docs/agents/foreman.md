@@ -127,7 +127,7 @@ The lane runs independently:
 
 1. Foreman opens a Rex pane with the dev server in the lane's worktree:
    ```bash
-   rex split -s "$REX_SESSION" --split=bottom -- bash -c "cd .worktrees/<issue>-<slug> && npm run dev"
+   rex split -s "$REX_SESSION" -b "$REX_BLOCK" --split=bottom -- bash -c "cd .worktrees/<issue>-<slug> && npm run dev"
    ```
 2. Foreman sends the PO a text summary: what was built + what to verify on localhost.
 3. PO verifies on localhost.

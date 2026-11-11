@@ -235,7 +235,7 @@ _lane_rex_open() {
   agent_cmd="$(_lane_agent_cmd "$agent" "$model" "$dir")" || return 1
 
   local split_json
-  split_json="$(rex split -s "$REX_SESSION" --split=right --json -- bash -c "$agent_cmd")" ||
+  split_json="$(rex split -s "$REX_SESSION" -b "$REX_BLOCK" --split=right --json -- bash -c "$agent_cmd")" ||
     { printf 'rex split failed\n' >&2; return 1; }
   block_id="$(printf '%s\n' "$split_json" | jq -r '.block_ids[0]')" ||
     { printf 'could not parse block_ids from rex split output: %s\n' "$split_json" >&2; return 1; }
