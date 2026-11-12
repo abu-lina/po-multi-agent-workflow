@@ -32,8 +32,7 @@ if [ ${#warnings[@]} -gt 0 ]; then
   for w in "${warnings[@]}"; do
     msg+=" | $w"
   done
-  printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"%s"}}\n' \
-    "$(printf '%s' "$msg" | sed 's/"/\\"/g')"
+  jq -n --arg m "$msg" '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":$m}}'
 fi
 
 exit 0
