@@ -19,6 +19,8 @@
 #   .claude/hooks/fixed-proof-gate.sh
 #   .claude/hooks/post-write-check.sh
 #   .claude/hooks/on-stop-nudge.sh
+#   .claude/hooks/foreman-no-code-gate.sh
+#   .claude/hooks/foreman-no-read-src-gate.sh
 #   scripts/hooks/lane-signal-notify.sh
 #   scripts/sync-workflow.sh
 #
@@ -54,6 +56,8 @@ SYNC_FILES=(
   .claude/hooks/sync-workflow-on-start.sh
   .claude/hooks/ui-taste-gate.sh
   .claude/hooks/strip-attribution.sh
+  .claude/hooks/foreman-no-code-gate.sh
+  .claude/hooks/foreman-no-read-src-gate.sh
   scripts/hooks/lane-signal-notify.sh
   scripts/sync-workflow.sh
   reference/operate.md
