@@ -39,5 +39,5 @@ signal="$(tr -dc '[:print:]' < "$root/.lane-signal")"
 
 rex send -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" "Lane #$ISSUE: $signal" 2>/dev/null &&
   rex send-key -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" enter 2>/dev/null
-# Mark as delivered so repeated session exits don't re-send.
-mv "$root/.lane-signal" "$root/.lane-signal-sent" 2>/dev/null
+# Mark as delivered regardless of rex success to prevent re-delivery loops.
+mv "$root/.lane-signal" "$root/.lane-signal-sent" 2>/dev/null || true

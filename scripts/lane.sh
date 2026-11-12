@@ -336,6 +336,9 @@ lane() {
       fi
       # Clear stale signal state from the previous session.
       rm -f "$dir/.lane-signal" "$dir/.lane-signal-sent"
+      # Update Rex coordinates so the Stop hook targets the current session.
+      sed -i '' '/^REX_SESSION_ID=/d;/^FOREMAN_BLOCK=/d' "$dir/.env.lane"
+      printf 'REX_SESSION_ID=%s\nFOREMAN_BLOCK=%s\n' "$REX_SESSION" "$REX_BLOCK" >> "$dir/.env.lane"
     fi
     printf 'lane #%s: %s on %s\n' "$issue" "$dir" "$branch"
     _lane_rex_open "$agent" "$model" "$dir" "$dir/.env.lane" "$issue"
