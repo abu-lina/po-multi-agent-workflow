@@ -339,6 +339,8 @@ lane() {
       # Update Rex coordinates so the Stop hook targets the current session.
       sed -i '' '/^REX_SESSION_ID=/d;/^FOREMAN_BLOCK=/d' "$dir/.env.lane"
       printf 'REX_SESSION_ID=%s\nFOREMAN_BLOCK=%s\n' "$REX_SESSION" "$REX_BLOCK" >> "$dir/.env.lane"
+      # Sync Claude Code hooks from main checkout so the worktree runs the latest version.
+      [[ -d "$root/scripts/hooks" ]] && cp -f "$root"/scripts/hooks/*.sh "$dir/scripts/hooks/" 2>/dev/null
     fi
     printf 'lane #%s: %s on %s\n' "$issue" "$dir" "$branch"
     _lane_rex_open "$agent" "$model" "$dir" "$dir/.env.lane" "$issue"
