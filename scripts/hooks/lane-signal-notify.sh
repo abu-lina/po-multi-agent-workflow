@@ -29,6 +29,8 @@ if [[ ! -f "$root/.lane-signal" ]]; then
   msg="Lane #$ISSUE: session ended without a signal, branch: $branch, last commit: $last_commit"
   rex send -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" "$msg" 2>/dev/null &&
     rex send-key -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" enter 2>/dev/null
+  # Mark delivered so repeated exits don't re-send the fallback message.
+  printf 'no-signal fallback delivered\n' > "$root/.lane-signal-sent" 2>/dev/null
   exit 0
 fi
 

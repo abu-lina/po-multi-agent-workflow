@@ -239,7 +239,7 @@ _lane_last_block() {
   local lane_dir block
   for lane_dir in "$root/.worktrees"/*/; do
     [[ -f "$lane_dir/.env.lane" ]] || continue
-    block="$(grep -m1 '^LANE_BLOCK=' "$lane_dir/.env.lane" 2>/dev/null | cut -d= -f2-)" || continue
+    block="$(grep '^LANE_BLOCK=' "$lane_dir/.env.lane" 2>/dev/null | tail -1 | cut -d= -f2-)" || continue
     [[ -n "$block" && "$block" =~ ^[a-zA-Z0-9_:-]+$ ]] || continue
     # Verify the block still exists in the session
     rex block read "$block" -s "$REX_SESSION" --lines 0 >/dev/null 2>&1 || continue
@@ -326,6 +326,17 @@ lane() {
       existing_type="$(_lane_type "$issue")"
       model="$(_lane_default_model "$agent" "$existing_type")"
     fi
+    # Close the previous Rex pane (if any) before opening a new one.
+    if [[ -f "$dir/.env.lane" ]]; then
+      local old_block old_session
+      old_block="$(grep '^LANE_BLOCK=' "$dir/.env.lane" 2>/dev/null | tail -1 | cut -d= -f2-)" || true
+      old_session="$(grep -m1 '^REX_SESSION_ID=' "$dir/.env.lane" 2>/dev/null | cut -d= -f2-)" || true
+      if [[ -n "$old_block" && "$old_block" =~ ^[a-zA-Z0-9_:-]+$ ]]; then
+        rex block close "$old_block" -s "${old_session:-$REX_SESSION}" 2>/dev/null || true
+      fi
+      # Clear stale signal state from the previous session.
+      rm -f "$dir/.lane-signal" "$dir/.lane-signal-sent"
+    fi
     printf 'lane #%s: %s on %s\n' "$issue" "$dir" "$branch"
     _lane_rex_open "$agent" "$model" "$dir" "$dir/.env.lane" "$issue"
     return 0
@@ -404,7 +415,7 @@ lane_done() {
 
   local lane_block="" rex_session_id=""
   if [[ -f "$dir/.env.lane" ]]; then
-    lane_block="$(grep -m1 '^LANE_BLOCK=' "$dir/.env.lane" 2>/dev/null | cut -d= -f2-)" || true
+    lane_block="$(grep '^LANE_BLOCK=' "$dir/.env.lane" 2>/dev/null | tail -1 | cut -d= -f2-)" || true
     rex_session_id="$(grep -m1 '^REX_SESSION_ID=' "$dir/.env.lane" 2>/dev/null | cut -d= -f2-)" || true
   fi
 
@@ -422,7 +433,7 @@ lane_done() {
 
   # Close the lane pane before removing the worktree so .env.lane is still readable on retry.
   if [[ -n "$lane_block" ]]; then
-    rex block close -s "$rex_session_id" "$lane_block" 2>/dev/null || true
+    rex block close "$lane_block" -s "$rex_session_id" 2>/dev/null || true
   fi
 
   # Git's force option removes ignored build output such as .next and node_modules.

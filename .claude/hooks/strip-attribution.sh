@@ -31,8 +31,8 @@ fi
 
 # Only emit updatedInput if the command actually changed
 if [[ "$new_cmd" != "$cmd" ]]; then
-  jq -n --arg cmd "$new_cmd" \
-    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":$cmd}}}'
+  jq -n --arg c "$new_cmd" \
+    '{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"command":$c}}}'
 fi
 
 exit 0
