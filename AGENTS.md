@@ -22,6 +22,7 @@ If none of these apply (an ad-hoc session in the main checkout), you still follo
 6. Open the PR as a draft at first push with `Closes #<issue>` in the body.
 7. Conventional commits: `fix:`, `feat:`, `refactor:`, `test:`, `chore:`, `docs:`, `ci:`. Scope is the `area:*` label without the prefix.
 8. Don't delete files you didn't create unless the issue asks for it. Don't bypass hooks (`--no-verify`).
+9. No `Co-Authored-By` or similar trailer lines in commits. No AI-attribution footers in PR descriptions. Commits and PRs read as if written by the repo owner.
 
 ## TDD
 
