@@ -38,7 +38,7 @@ signal="$(tr -dc '[:print:]' < "$root/.lane-signal")"
 [[ "$signal" =~ $SIGNAL_VOCAB_RE ]] || exit 0
 
 # On handoff, append a Final Summary section to .lane-notes.md for Alfred.
-if [[ "$signal" == handoff:* ]]; then
+if [[ "$signal" == handoff:* && -f "$root/.lane-notes.md" ]]; then
   {
     printf '\n## Final Summary\n\n'
     printf -- '- **Outcome:** %s\n' "$signal"

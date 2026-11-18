@@ -68,10 +68,8 @@ printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d2/.worktrees/4
 printf 'handoff: PR #100 ready for review' > "$d2/.worktrees/42-slug/.lane-signal"
 rm -f "$rex_log"
 MOCK_TOPLEVEL="$d2/.worktrees/42-slug" bash "$HOOK" <<< ""
-check "handoff creates .lane-notes.md when absent" \
-  "$([ -f "$d2/.worktrees/42-slug/.lane-notes.md" ] && echo 1 || echo 0)"
-check "created .lane-notes.md has Final Summary" \
-  "$(grep -q '## Final Summary' "$d2/.worktrees/42-slug/.lane-notes.md" && echo 1 || echo 0)"
+check "handoff skips Final Summary when .lane-notes.md absent" \
+  "$([ ! -f "$d2/.worktrees/42-slug/.lane-notes.md" ] && echo 1 || echo 0)"
 rm -rf "$d2"
 
 # Test: blocked signal does NOT append Final Summary
