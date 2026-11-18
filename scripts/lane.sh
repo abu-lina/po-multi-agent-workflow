@@ -131,6 +131,14 @@ _lane_prompt() {
   local issue="$1"
   printf 'You are a lane. Read AGENTS.md, then docs/agents/lane.md, then work on GitHub issue #%s.
 
+LANE NOTES — maintain .lane-notes.md in the worktree root throughout the session:
+- Create it at session start with sections: Goal, Plan, Decisions, Blockers, Changed Files
+- Update the Plan section after each TDD step (checked/unchecked items)
+- Append to Decisions when you make a design decision
+- Update Blockers when you hit or clear a blocker
+- Update Changed Files as you modify files
+This file is git-ignored and read by the foreman for status.
+
 AUTO-SKILLS — load these before writing any code, no exceptions:
 - mattpocock-skills:tdd — every feature lane, before the first test
 - supabase + supabase-postgres-best-practices — any DB, schema, or RLS work

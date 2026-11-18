@@ -1,2 +1,4 @@
 node_modules/
 .worktrees/
+.lane-notes.md
+.review-results/
