@@ -37,6 +37,14 @@ fi
 signal="$(tr -dc '[:print:]' < "$root/.lane-signal")"
 [[ "$signal" =~ $SIGNAL_VOCAB_RE ]] || exit 0
 
+# On handoff, append a Final Summary section to .lane-notes.md for Alfred.
+if [[ "$signal" == handoff:* && -f "$root/.lane-notes.md" ]]; then
+  {
+    printf '\n## Final Summary\n\n'
+    printf -- '- **Outcome:** %s\n' "$signal"
+  } >> "$root/.lane-notes.md" 2>/dev/null
+fi
+
 rex send -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" "Lane #$ISSUE: $signal" 2>/dev/null &&
   rex send-key -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" enter 2>/dev/null
 # Mark as delivered regardless of rex success to prevent re-delivery loops.

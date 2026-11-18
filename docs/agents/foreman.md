@@ -149,7 +149,7 @@ The lane runs independently:
 - `ui-taste` — aesthetic and UX quality
 - `impeccable:impeccable-finish-reviewer` — correctness and completeness
 
-Dispatch all reviewers in parallel as subagents (Agent tool, fresh context, scoped to the diff). Wait for all results. Fix Critical and Important issues before proceeding.
+Dispatch all reviewers in parallel as subagents (Agent tool, fresh context, scoped to the diff). Each reviewer writes its findings to `.review-results/<reviewer-name>.md` in the lane's worktree. Wait for all results. Fix Critical and Important issues before proceeding.
 
 If code review forces a fix:
 1. Lane implements the fix.

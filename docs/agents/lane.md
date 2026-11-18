@@ -26,6 +26,8 @@ Report by commenting on the issue (`gh issue comment <issue> --body "..."`) and 
 
 Read only what the issue needs. Start from the files the issue names, then follow imports. Don't read `docs/`, `agent-output/`, or unrelated features unless a failing test leads you there.
 
+**Lane notes.** Maintain `.lane-notes.md` in your worktree root throughout the session. Create it at session start with sections: Goal, Plan, Decisions, Blockers, Changed Files. Update it after each TDD step. This file is git-ignored and read by the foreman for status.
+
 ## 1. Red: tests from acceptance criteria
 
 - One test (or test block) per acceptance criterion. Name tests after the criterion, not after the implementation.

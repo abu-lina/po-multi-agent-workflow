@@ -20,3 +20,4 @@ bash scripts/test-lane-done-gh-host.sh
 bash scripts/test-lane-env-lane.sh
 bash tests/scripts/auto-merge-fallback.test.sh
 bash tests/scripts/strip-attribution.test.sh
+bash tests/scripts/alfred-conventions.test.sh

@@ -131,6 +131,8 @@ _lane_prompt() {
   local issue="$1"
   printf 'You are a lane. Read AGENTS.md, then docs/agents/lane.md, then work on GitHub issue #%s.
 
+LANE NOTES — maintain .lane-notes.md per docs/agents/lane.md (git-ignored, read by the foreman for status).
+
 AUTO-SKILLS — load these before writing any code, no exceptions:
 - mattpocock-skills:tdd — every feature lane, before the first test
 - supabase + supabase-postgres-best-practices — any DB, schema, or RLS work
