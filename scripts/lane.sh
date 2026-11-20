@@ -221,7 +221,7 @@ _lane_last_block() {
 
 _lane_rex_open() {
   local agent="$1" model="$2" dir="$3" env_file="$4" issue="$5"
-  local agent_cmd block_id brief
+  local agent_cmd block_id
 
   agent_cmd="$(_lane_agent_cmd "$agent" "$model" "$dir")" || return 1
 
@@ -286,7 +286,7 @@ lane() {
   [[ "${REX_BLOCK:-}" =~ ^[a-zA-Z0-9_:-]+$ ]] || { printf 'REX_BLOCK contains invalid characters\n' >&2; return 1; }
   [[ "$issue" =~ ^[0-9]+$ ]] || { printf 'issue must be a positive integer\n' >&2; return 1; }
 
-  local root dir branch port base
+  local root dir branch port
   root="$(_lane_root)" || { echo "not inside a git repo" >&2; return 1; }
   [[ "$root" == */.worktrees/* ]] && { echo "run lane from the main checkout, not a worktree" >&2; return 1; }
   dir="$(_lane_dir "$root" "$issue")"
@@ -325,7 +325,7 @@ lane() {
   [[ -z "$model" ]] && model="$(_lane_default_model "$agent" "$issue_type")"
   branch="$issue_type/$issue-$slug"
   dir="$root/.worktrees/$issue-$slug"
-  base="$(_lane_base)" || return 1
+  _lane_base >/dev/null || return 1
   _lane_check_main || return 1
   if ! git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
     gh issue develop "$issue" --name "$branch" --base main || return 1
