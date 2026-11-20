@@ -2,7 +2,7 @@
 # Lane helpers for the foreman + crew workflow (docs/agents/foreman.md).
 # Source from ~/.zshrc:  source ~/your-project/scripts/lane.sh
 #
-#   lane <issue> [slug] [claude|copilot|devin|opencode] [model|effort]
+#   lane <issue> [slug] [claude|copilot|opencode] [model|effort]
 #   lane_done <issue> [--force]           remove a merged lane
 #   lane_status                           one line per lane: branch + PR state + CI
 #
@@ -53,7 +53,7 @@ _lane_check_main() {
   done
   for stale_dir in rebase-merge rebase-apply; do
     if [[ -d "$git_dir/$stale_dir" ]]; then
-      rm -rf "$git_dir/$stale_dir"
+      rm -rf "${git_dir:?}/$stale_dir"
       printf 'removed stale %s/ from previous session\n' "$stale_dir"
     fi
   done
@@ -115,7 +115,7 @@ _lane_type() {
 }
 
 # Default Claude model when none is specified. Heavier work gets a stronger model.
-# No-op for non-Claude agents (copilot/devin/opencode control their own models).
+# No-op for non-Claude agents (copilot/opencode control their own models).
 _lane_default_model() {
   local agent="$1" issue_type="$2"
   [[ "$agent" != "claude" ]] && return 0
@@ -149,7 +149,6 @@ Start with step 0 of lane.md and stop at any "stop and ask" condition. Before st
 }
 
 # Build the agent CLI command string for use inside a rex pane.
-# Side effect for devin: writes a temp sandbox config.
 _lane_agent_cmd() {
   local agent="$1" model="${2:-}" dir="$3"
   local model_flag=""
@@ -196,35 +195,6 @@ _lane_agent_cmd() {
       local quoted_flags
       quoted_flags="$(printf '%q ' "${flags[@]}")"
       printf 'cd %q && copilot %s' "$dir" "$quoted_flags"
-      ;;
-    devin)
-      local root git_common_dir config_dir config_file
-      root="$(git rev-parse --show-toplevel)" || return 1
-      git_common_dir="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)" ||
-        { echo "could not resolve the repository's git common directory" >&2; return 1; }
-      config_dir="$(mktemp -d "${TMPDIR:-/tmp}/lane-config.XXXXXX")" || return 1
-      config_file="$config_dir/lane.json"
-      (umask 077 && jq -n --arg git_common_dir "$git_common_dir" '{
-        "permissions": {
-          "allow": ["Write(\($git_common_dir))"]
-        },
-        "sandbox": {
-          "excluded": {
-            "allow": [
-              "Exec(gh issue comment)",
-              "Exec(gh pr create --draft)",
-              "Exec(gh pr checks)",
-              "Exec(gh pr view)"
-            ]
-          }
-        }
-      }' > "$config_file") ||
-        { echo "could not write Devin lane sandbox config" >&2; return 1; }
-      local -a flags=(--permission-mode accept-edits --sandbox --config "$config_file")
-      [[ -n "$model" ]] && flags+=(--model "$model")
-      local quoted_flags
-      quoted_flags="$(printf '%q ' "${flags[@]}")"
-      printf 'cd %q && devin %s' "$dir" "$quoted_flags"
       ;;
     opencode)
       # shortcut: opencode CLI flags TBD; update once opencode CLI stabilises
@@ -306,9 +276,9 @@ _lane_rex_open() {
 
 lane() {
   local issue="${1:-}" slug="${2:-}" agent="${3:-claude}" model="${4:-}"
-  [[ -z "$issue" ]] && { echo "usage: lane <issue> [slug] [claude|copilot|devin|opencode] [model|effort]" >&2; return 1; }
-  [[ "$agent" == claude || "$agent" == copilot || "$agent" == devin || "$agent" == opencode ]] ||
-    { echo "agent must be claude, copilot, devin, or opencode" >&2; return 1; }
+  [[ -z "$issue" ]] && { echo "usage: lane <issue> [slug] [claude|copilot|opencode] [model|effort]" >&2; return 1; }
+  [[ "$agent" == claude || "$agent" == copilot || "$agent" == opencode ]] ||
+    { echo "agent must be claude, copilot, or opencode" >&2; return 1; }
 
   [[ -n "${REX_SESSION:-}" ]] || { printf 'REX_SESSION is not set; run lane from a Rex terminal\n' >&2; return 1; }
   [[ -n "${REX_BLOCK:-}" ]] || { printf 'REX_BLOCK is not set; run lane from a Rex terminal\n' >&2; return 1; }
@@ -431,7 +401,7 @@ lane_done() {
     state="$(GH_HOST="" gh pr view "$branch" --json state --jq .state 2>/dev/null)"
     [[ "$state" != "MERGED" ]] && { echo "PR for $branch is '${state:-missing}', not MERGED. Use --force only after the owner agrees." >&2; return 1; }
     # .worktrees/ is excluded via .gitignore; only .env.lane needs explicit grep exclusion
-    [[ -n "$(git -C "$dir" status --porcelain | grep -Ev '^.. \.env\.lane$')" ]] && { echo "$dir has uncommitted changes" >&2; return 1; }
+    git -C "$dir" status --porcelain | grep -Evq '^.. \.env\.lane$' && { echo "$dir has uncommitted changes" >&2; return 1; }
     if git -C "$root" rev-parse --verify -q "origin/$branch" >/dev/null; then
       [[ -n "$(git -C "$root" log "origin/$branch..$branch" --oneline)" ]] && { echo "$dir has unpushed commits" >&2; return 1; }
     fi
@@ -501,7 +471,7 @@ lane_status() {
         worktree="" branch=""
         ;;
     esac
-  done <<<"$worktrees"
+  done < <(printf '%s\n\n' "$worktrees")
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

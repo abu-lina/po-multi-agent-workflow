@@ -22,7 +22,7 @@ This file is **init-only**: `scripts/sync-workflow.sh` copies it at `--init` but
 14. **One learning file per issue.** Each lane adds `docs/ai/learnings/<issue>.md` in its PR and includes the one-sentence learning in the PR body and final issue comment. Per-issue files avoid merge conflicts on `gh pr update-branch`.
 15. **Auto-dispatch is off.** The foreman proposes and the owner approves.
 16. **Rex is the agent surface.** The foreman starts in the main repository pane; lanes start in a Rex pane opened inside the worktree. The default foreman is Claude Code on `claude-opus-5-5-high`; lanes default to Claude Code (Sonnet) or Copilot on Auto. Both accept a per-invocation model; Copilot also accepts a reasoning-effort value.
-17. **Permissions are scoped where possible.** Copilot lanes auto-approve only the required write, run, git, and selected GitHub issue/PR tools, with explicit denies for merge, rebase, and PR merge. Devin lanes use `accept-edits` with `--sandbox`. The foreman uses a private 0600 copy of `.devin/foreman.json` so session state (grants, model) doesn't pollute the committed config. Never use `--allow-all-paths`, `--allow-all`, or `--yolo`.
+17. **Permissions are scoped where possible.** Copilot lanes auto-approve only the required write, run, git, and selected GitHub issue/PR tools, with explicit denies for merge, rebase, and PR merge. Never use `--allow-all-paths`, `--allow-all`, or `--yolo`.
 18. **Folder trust is never changed automatically** for a new worktree.
 19. **Lane environment files stay minimal.** `.env.lane` contains only `PORT` and `PLAYWRIGHT_BASE_URL`; lane creation does not copy `.env.local` or other secrets. A lane created its own placeholder and passed CI without owner credentials — that's the target.
 

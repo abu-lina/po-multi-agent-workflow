@@ -49,7 +49,7 @@ Skip shaping for confirmed bugs with a clear reproduction — go straight to lan
 | When                            | Action                                                                                                                                              |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Lane finishes implementation    | Lane fires `handoff` skill — structured signal to foreman.                                                                                          |
-| Foreman receives handoff signal | Open Rex dev-server pane: `rex split -s "$REX_SESSION" --split=bottom -- bash -c "cd .worktrees/<issue>-<slug> && npm run dev"` |
+| Foreman receives handoff signal | Open Rex dev-server pane: `rex split -s "$REX_SESSION" --split=below -- bash -c "cd .worktrees/<issue>-<slug> && npm run dev"` |
 
 PO verifies on localhost. Any positive reply ("looks good", "ship it", "yes", "approved") proceeds to code review.
 

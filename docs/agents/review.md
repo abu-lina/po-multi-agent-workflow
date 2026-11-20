@@ -1,6 +1,6 @@
 # Review
 
-A review runs automatically when a lane reports done; the owner doesn't start it. Reviews run as parallel subagents with the `reviewer` profile (`.devin/agents/reviewer.md`), one per role, against a single PR. The profile has `read`, `grep` and `glob` only: no exec, write or edit, so a reviewer can't comment, label, push or merge.
+A review runs automatically when a lane reports done; the owner doesn't start it. Reviews run as parallel subagents one per role, against a single PR. Reviewers are read-only: they don't comment, label, push or merge.
 
 Reviewers can't run `gh pr diff`. The foreman runs `scripts/review-bundle <pr>` once. It prints the path of a bundle file holding the diff, the issue's acceptance criteria and the PR-head content of every touched file. Each reviewer reads that file and only the files the diff touches plus their direct imports, and returns a list of findings in the format below. The foreman (or whoever triggered the review) merges them.
 
