@@ -54,7 +54,7 @@ case "$args" in
   "pr list --state merged"*) [[ "${MOCK_GH_FAIL:-}" == merged ]] && exit 1; cat "$m/merged.json" ;;
   "pr list --state open"*) cat "$m/open.json" ;;
   "issue list --label ready"*) cat "$m/ready.json" ;;
-  *"label:retro"*) cat "$m/retro.json" ;;
+  *"label:retro"*) [[ "${MOCK_GH_FAIL:-}" == retro ]] && exit 1; cat "$m/retro.json" ;;
   "api user"*) echo "${MOCK_GH_LOGIN:-po-owner}" ;;
   "issue comment 7"*) [[ "${MOCK_GH_FAIL:-}" == comment ]] && exit 1
     [[ -n "${MOCK_LANE_ON_COMMENT:-}" ]] && mkdir -p "$MOCK_LANE_ON_COMMENT"; cat > "$m/comment_body"; echo "https://github.com/o/r/issues/7#issuecomment-1" ;;
@@ -380,6 +380,50 @@ check "AC7: titles truncated to 80 chars" \
 inside="$(awk '/^```/{f=!f; next} f' "$mock/claude_arg")"
 check "AC7: --questions text sits inside the block" \
   "$(yes_if bash -c 'grep -q "octocat" <<< "$1" && ! grep -q "octocat" <<< "$2"' _ "$inside" "$outside")"
+teardown
+
+# ------------------------------------------------------------------
+# #53: no stderr noise and no leaked temp files
+
+# macOS mktemp ignores TMPDIR, so a PATH stub puts the script's temp files in $T/tmp.
+REAL_MKTEMP="$(command -v mktemp)"
+# Like run_script, but stdout and stderr go to $T/out and $T/err.
+run_split() {
+  rm -rf "$T/tmp"; mkdir -p "$T/tmp"
+  printf '#!/usr/bin/env bash\n[[ $# -eq 0 ]] && exec %q %q\nexec %q "$@"\n' \
+    "$REAL_MKTEMP" "$T/tmp/tmp.XXXXXX" "$REAL_MKTEMP" > "$bin/mktemp"
+  chmod +x "$bin/mktemp"
+  (cd "$repo" && PATH="$bin:$PATH" MOCK_DIR="$mock" FOREMAN_MEMORY_DIR="$T/memory" \
+    REX_SESSION="session:old" REX_BLOCK="block:old1" FOREMAN_VERIFY_TRIES=2 FOREMAN_VERIFY_DELAY=0 \
+    bash "$SCRIPT" "$@" > "$T/out" 2> "$T/err")
+}
+tmp_count() { find "$T/tmp" -type f | wc -l | tr -d ' '; }
+
+setup
+run_split run; rc=$?
+check "#53 AC1+AC4: run succeeds and writes nothing to stderr" \
+  "$(yes_if bash -c '[[ "$1" -eq 0 && ! -s "$2" ]]' _ "$rc" "$T/err")"
+check "#53 AC2: run leaves no temp file behind" "$(yes_if test "$(tmp_count)" -eq 0)"
+run_split check
+check "#53 AC2: check leaves no temp file behind" "$(yes_if test "$(tmp_count)" -eq 0)"
+check "#53 AC4: check writes nothing to stderr" "$(yes_if test ! -s "$T/err")"
+teardown
+
+setup
+MOCK_GH_FAIL=retro run_split run; rc=$?
+check "#53 AC3: build_body fails after mktemp -> run fails naming the collect step" \
+  "$(yes_if bash -c '[[ "$1" -ne 0 ]] && grep -qi collect "$2"' _ "$rc" "$T/err")"
+check "#53 AC3: build_body fails at a later gh call -> no temp file left" "$(yes_if test "$(tmp_count)" -eq 0)"
+check "#53 AC3: build_body failure -> no unbound variable error" \
+  "$(yes_if bash -c '! grep -q "unbound variable" "$1"' _ "$T/err")"
+teardown
+
+setup
+# Passes since_of's format check but touch -d rejects it: fails right after mktemp.
+printf '[{"number":7,"createdAt":"2026-13-45T99:99:99Z","comments":[]}]' > "$mock/handover_issue.json"
+run_split run; rc=$?
+check "#53 AC3: touch on the temp file fails -> run fails and the temp file is removed" \
+  "$(yes_if bash -c '[[ "$1" -ne 0 && "$2" -eq 0 ]] && grep -qi collect "$3"' _ "$rc" "$(tmp_count)" "$T/err")"
 teardown
 
 # ------------------------------------------------------------------

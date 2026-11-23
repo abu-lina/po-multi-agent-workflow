@@ -122,11 +122,15 @@ build_body() {
   next="$(next_issues | list)" || return 1
   learnings="$(learnings_since "$since")" || return 1
   # BSD find can't parse ISO dates in -newermt; compare against a reference file instead.
+  # No EXIT trap: this runs in $(...), so the trap would fire after the local ref is gone.
   ref="$(mktemp)" || return 1
-  trap 'rm -f "$ref"' EXIT
-  touch -d "$since" "$ref" || return 1
+  if ! touch -d "$since" "$ref"; then
+    rm -f "$ref"
+    return 1
+  fi
   # A missing memory dir means no TRAPs, not an error.
   traps="$({ find "$memory" -name 'trap_*.md' -newer "$ref" 2>/dev/null || true; } | basenames | list)"
+  rm -f "$ref"
   retro="$(gh issue list --state all --search "label:retro created:>=$since" --json number,title | item_lines | list)" ||
     return 1
 
