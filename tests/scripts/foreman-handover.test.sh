@@ -418,6 +418,14 @@ check "#53 AC3: build_body failure -> no unbound variable error" \
   "$(yes_if bash -c '! grep -q "unbound variable" "$1"' _ "$T/err")"
 teardown
 
+setup
+# Passes since_of's format check but touch -d rejects it: fails right after mktemp.
+printf '[{"number":7,"createdAt":"2026-13-45T99:99:99Z","comments":[]}]' > "$mock/handover_issue.json"
+run_split run; rc=$?
+check "#53 AC3: touch on the temp file fails -> run fails and the temp file is removed" \
+  "$(yes_if bash -c '[[ "$1" -ne 0 && "$2" -eq 0 ]] && grep -qi collect "$3"' _ "$rc" "$(tmp_count)" "$T/err")"
+teardown
+
 # ------------------------------------------------------------------
 # AC8: foreman.md documents session end
 
