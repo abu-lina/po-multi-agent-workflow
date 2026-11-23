@@ -154,7 +154,7 @@ teardown
 setup
 run_script run > /dev/null
 check "AC4: rex new starts in the main checkout" \
-  "$(yes_if grep -q "^new .*--cwd $repo" "$mock/rex.log")"
+  "$(yes_if grep -q "^new .*--cwd $(cd "$repo" && pwd -P)" "$mock/rex.log")"
 check "AC4: session renamed to foreman-<date>-<n> (next free n)" \
   "$(yes_if grep -q "^session rename session:new1 foreman-$TODAY-2$" "$mock/rex.log")"
 run_new_cmd

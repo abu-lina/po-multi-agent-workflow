@@ -192,6 +192,40 @@ If code review forces a fix:
 
 Include the learning sentence in the PR body and final issue comment.
 
+## Session end
+
+**Trigger:** 3rd lane merged in this foreman session. "This session" means since the last comment on the pinned issue labelled `handover`. Token count is advisory only; hooks can't measure it.
+
+After each merge, run:
+
+```bash
+scripts/foreman-handover check
+```
+
+It prints either a proposal or the lanes that block a session end. Never end the session unprompted. Propose it to the PO and wait for "yes".
+
+Checklist before running the handover:
+
+- [ ] `check` shows 3 or more merged lanes and no blocking lane
+- [ ] every lane is closed with `scripts/lane done <issue>`, no open worktree, no unread `.lane-signal` (lane panes live in this Rex session and die with it)
+- [ ] learnings and TRAPs for merged lanes are written
+- [ ] retro issues are filed
+- [ ] the PO said "yes"
+
+Then run:
+
+```bash
+scripts/foreman-handover run --questions "<unanswered PO questions, or empty>"
+```
+
+The script refuses while any lane is active and names the lane. Otherwise it:
+
+1. Posts a handover comment (25 lines or fewer) on the `handover` issue: merged PRs, open PRs and lanes, next 1 to 3 issues (priority order, no shared `area:*`), PO questions, learnings, TRAPs, retro issues.
+2. Starts a new Rex session in the main checkout running `claude`, with the handover as its first message.
+3. Verifies the new session, renames it `foreman-<date>-<n>`, then kills this session last.
+
+If any step fails, this session stays alive and the error names the failed step.
+
 ## Parallel lanes
 
 **Rules:**

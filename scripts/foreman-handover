@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# Foreman session end: hand over to a fresh foreman session (docs/agents/foreman.md).
+#
+#   foreman-handover check                    propose a session end after 3 merged lanes
+#   foreman-handover run [--questions TEXT]   post handover, start new session, kill this one
+#
+# "This session" means: since the last comment on the open issue labelled `handover`.
+# Run from the main checkout, inside the foreman's Rex session.
+
+set -uo pipefail
+
+die() { printf 'foreman-handover: %s\n' "$*" >&2; exit 1; }
+fail_step() { die "handover failed at step: $1; old session left running"; }
+
+# Strip every value from git/gh to printable characters (TRAP: rex send newline injection).
+clean() { tr -dc '[:print:]'; }
+# NUL-separated records in, one cleaned record per line out.
+clean_records() {
+  local rec
+  while IFS= read -r -d '' rec; do printf '%s\n' "$(printf '%s' "$rec" | clean)"; done
+}
+join() { grep . | paste -sd ';' - | sed 's/;/; /g'; }
+or_none() { local v; v="$(cat)"; printf '%s\n' "${v:-none}"; }
+
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repo"
+[[ "$root" == */.worktrees/* ]] && die "run from the main checkout, not a worktree"
+
+active_lanes() {
+  local d name
+  for d in "$root"/.worktrees/*/; do
+    [[ -d "$d" ]] || continue
+    name="$(basename "$d" | clean)"
+    printf 'lane #%s (.worktrees/%s) is still open' "${name%%-*}" "$name"
+    [[ -f "$d/.lane-signal" ]] && printf ' and has an unread .lane-signal'
+    printf '\n'
+  done
+}
+
+handover_issue() {
+  local n
+  n="$(gh issue list --label handover --state open --json number --limit 1 | jq -r '.[0].number // empty')" ||
+    die "could not list issues labelled handover"
+  [[ "$n" =~ ^[0-9]+$ ]] || die "no open issue labelled handover; create and pin one first"
+  printf '%s\n' "$n"
+}
+
+since_of() {
+  local s
+  s="$(gh issue view "$1" --json createdAt,comments | jq -r '(.comments | last | .createdAt) // .createdAt' | clean)"
+  [[ "$s" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z$ ]] || die "could not read handover timestamp from issue #$1"
+  printf '%s\n' "$s"
+}
+
+merged_prs() {
+  gh pr list --state merged --search "merged:>=$1" --json number,title --limit 50 |
+    jq -j '.[] | "#\(.number) \(.title)\u0000"' | clean_records
+}
+
+# Up to 3 ready issues, priority order, no two sharing an area:* label.
+next_issues() {
+  gh issue list --label ready --state open --json number,title,labels --limit 50 | jq -j '
+    def prio: [.labels[].name | select(test("^P[0-3]$"))] | first // "P9";
+    def areas: [.labels[].name | select(startswith("area:"))];
+    sort_by(prio, .number)
+    | reduce .[] as $i ({picked: [], used: []}; . as $acc |
+        if (.picked | length) < 3 and ([$i | areas[] | select(IN($acc.used[]))] | length) == 0
+        then .picked += [$i] | .used += ($i | areas) else . end)
+    | .picked[] | "#\(.number) \(.title)\u0000"' 2>/dev/null | clean_records
+}
+
+build_body() {
+  local since="$1" questions="$2" memory ref
+  memory="${FOREMAN_MEMORY_DIR:-$HOME/.claude/projects/$(printf '%s' "$root" | sed 's/[^a-zA-Z0-9]/-/g')/memory}"
+  printf '## Foreman handover %s\n' "$(date +%F)"
+  printf 'Window: since %s\n\n' "$since"
+  printf -- '- Merged PRs: %s\n' "$(merged_prs "$since" | join | or_none)"
+  printf -- '- Open PRs and lanes: %s\n' "$(gh pr list --state open --json number,title,headRefName |
+    jq -j '.[] | "#\(.number) \(.title) (\(.headRefName))\u0000"' | clean_records | join | or_none)"
+  printf -- '- Next issues: %s\n' "$(next_issues | join | or_none)"
+  printf -- '- Unanswered PO questions: %s\n' "$(printf '%s' "$questions" | clean | or_none)"
+  printf -- '- Learnings written: %s\n' "$(git -C "$root" log --since="$since" --diff-filter=A --name-only --format= -- docs/ai/learnings/ |
+    while IFS= read -r f; do basename "$f" | clean; printf '\n'; done | join | or_none)"
+  # BSD find can't parse ISO dates in -newermt; compare against a reference file instead.
+  ref="$(mktemp)" && touch -d "$since" "$ref"
+  printf -- '- TRAPs written: %s\n' "$(find "$memory" -name 'trap_*.md' -newer "$ref" 2>/dev/null |
+    while IFS= read -r f; do basename "$f" | clean; printf '\n'; done | join | or_none)"
+  rm -f "$ref"
+  printf -- '- Retro issues filed: %s\n' "$(gh issue list --state all --search "label:retro created:>=$since" --json number,title |
+    jq -j '.[] | "#\(.number) \(.title)\u0000"' | clean_records | join | or_none)"
+}
+
+cmd_check() {
+  local blockers issue since count
+  blockers="$(active_lanes)"
+  if [[ -n "$blockers" ]]; then
+    printf 'Session end blocked:\n%s\n' "$blockers"
+    return 1
+  fi
+  issue="$(handover_issue)" || exit 1
+  since="$(since_of "$issue")" || exit 1
+  count="$(merged_prs "$since" | grep -c .)"
+  if (( count >= 3 )); then
+    printf '%s lanes merged since %s. Propose session end to the PO and wait for their "yes" before running: scripts/foreman-handover run\n' "$count" "$since"
+  else
+    printf '%s lanes merged since %s; no session end yet (trigger is 3).\n' "$count" "$since"
+  fi
+}
+
+cmd_run() {
+  local questions=""
+  [[ "${1:-}" == --questions ]] && questions="${2:-}"
+  [[ "${REX_SESSION:-}" =~ ^[a-zA-Z0-9_:-]+$ ]] || die "REX_SESSION is unset or invalid; run inside the foreman's Rex session"
+
+  local blockers
+  blockers="$(active_lanes)"
+  [[ -z "$blockers" ]] || die "refusing to kill the session:
+$blockers"
+
+  local issue since body url
+  issue="$(handover_issue)" || exit 1
+  since="$(since_of "$issue")" || exit 1
+  body="$(build_body "$since" "$questions" | head -n 25)"
+  url="$(printf '%s\n' "$body" | gh issue comment "$issue" --body-file - | clean)" || fail_step "post handover comment"
+  printf 'handover posted: %s\n' "$url"
+
+  local today n label msg cmd new_json sid
+  today="$(date +%F)"
+  n="$(rex session ls --json | jq -r --arg p "foreman-$today-" \
+    '[.sessions[].label | select(startswith($p)) | ltrimstr($p) | tonumber? ] | (max // 0) + 1')" || n=1
+  [[ "$n" =~ ^[0-9]+$ ]] || n=1
+  label="foreman-$today-$n"
+
+  msg="You are the foreman; follow docs/agents/foreman.md. Handover from the previous foreman session ($url):
+$body"
+  # %q keeps the root path and handover inert inside bash -c (TRAP: print-and-paste shell injection).
+  cmd="$(printf 'cd %q && claude %q' "$root" "$msg")"
+  new_json="$(rex new foreman-pending --cwd "$root" --json -- bash -c "$cmd")" || fail_step "spawn new Rex session"
+  sid="$(printf '%s' "$new_json" | jq -r '.session_id // empty')"
+  [[ "$sid" =~ ^[a-zA-Z0-9_:-]+$ ]] || fail_step "spawn new Rex session (no session id in: $(printf '%s' "$new_json" | clean))"
+
+  # Give a crashing claude time to take the session down before we check it.
+  sleep 2
+  rex session inspect "$sid" --json >/dev/null 2>&1 || fail_step "verify new session $sid"
+  rex session rename "$sid" "$label" || fail_step "rename new session $sid to $label"
+
+  printf 'new foreman session %s (%s) is up; killing this session\n' "$label" "$sid"
+  # Last: this script runs inside the old session and dies with it.
+  rex session kill "$REX_SESSION"
+}
+
+case "${1:-}" in
+  check) shift; cmd_check "$@" ;;
+  run) shift; cmd_run "$@" ;;
+  *) die "usage: foreman-handover check | run [--questions TEXT]" ;;
+esac
