@@ -19,8 +19,21 @@ clean_records() {
   local rec
   while IFS= read -r -d '' rec; do printf '%s\n' "$(printf '%s' "$rec" | clean)"; done
 }
-join() { grep . | paste -sd ';' - | sed 's/;/; /g'; }
-or_none() { local v; v="$(cat)"; printf '%s\n' "${v:-none}"; }
+# gh JSON array in, one cleaned "#<number> <title>" per line out.
+item_lines() { jq -j '.[] | "#\(.number) \(.title)\u0000"' | clean_records; }
+# Paths in, cleaned basenames out.
+basenames() {
+  local f
+  while IFS= read -r f; do
+    if [[ -n "$f" ]]; then basename "$f" | clean; printf '\n'; fi
+  done
+}
+# Lines in, one "a; b; c" line out, or "none".
+list() {
+  local v
+  v="$({ grep . || true; } | paste -sd ';' - | sed 's/;/; /g')"
+  printf '%s\n' "${v:-none}"
+}
 
 root="$(git rev-parse --show-toplevel 2>/dev/null)" || die "not inside a git repo"
 [[ "$root" == */.worktrees/* ]] && die "run from the main checkout, not a worktree"
@@ -52,8 +65,7 @@ since_of() {
 }
 
 merged_prs() {
-  gh pr list --state merged --search "merged:>=$1" --json number,title --limit 50 |
-    jq -j '.[] | "#\(.number) \(.title)\u0000"' | clean_records
+  gh pr list --state merged --search "merged:>=$1" --json number,title --limit 50 | item_lines
 }
 
 # Up to 3 ready issues, priority order, no two sharing an area:* label.
@@ -65,32 +77,41 @@ next_issues() {
     | reduce .[] as $i ({picked: [], used: []}; . as $acc |
         if (.picked | length) < 3 and ([$i | areas[] | select(IN($acc.used[]))] | length) == 0
         then .picked += [$i] | .used += ($i | areas) else . end)
-    | .picked[] | "#\(.number) \(.title)\u0000"' 2>/dev/null | clean_records
+    | .picked[] | "#\(.number) \(.title)\u0000"' | clean_records
 }
 
+# Fails (non-zero) when any gh/git call fails, so a wrong "none" is never posted.
 build_body() {
-  local since="$1" questions="$2" memory ref
+  local since="$1" questions="$2" memory ref merged open next learnings traps retro
   memory="${FOREMAN_MEMORY_DIR:-$HOME/.claude/projects/$(printf '%s' "$root" | sed 's/[^a-zA-Z0-9]/-/g')/memory}"
+  merged="$(merged_prs "$since" | list)" || return 1
+  open="$(gh pr list --state open --json number,title,headRefName |
+    jq -j '.[] | "#\(.number) \(.title) (\(.headRefName))\u0000"' | clean_records | list)" || return 1
+  next="$(next_issues | list)" || return 1
+  learnings="$(git -C "$root" log --since="$since" --diff-filter=A --name-only --format= -- docs/ai/learnings/ |
+    basenames | list)" || return 1
+  # BSD find can't parse ISO dates in -newermt; compare against a reference file instead.
+  ref="$(mktemp)" || return 1
+  touch -d "$since" "$ref" || { rm -f "$ref"; return 1; }
+  # A missing memory dir means no TRAPs, not an error.
+  traps="$({ find "$memory" -name 'trap_*.md' -newer "$ref" 2>/dev/null || true; } | basenames | list)"
+  rm -f "$ref"
+  retro="$(gh issue list --state all --search "label:retro created:>=$since" --json number,title | item_lines | list)" ||
+    return 1
+
   printf '## Foreman handover %s\n' "$(date +%F)"
   printf 'Window: since %s\n\n' "$since"
-  printf -- '- Merged PRs: %s\n' "$(merged_prs "$since" | join | or_none)"
-  printf -- '- Open PRs and lanes: %s\n' "$(gh pr list --state open --json number,title,headRefName |
-    jq -j '.[] | "#\(.number) \(.title) (\(.headRefName))\u0000"' | clean_records | join | or_none)"
-  printf -- '- Next issues: %s\n' "$(next_issues | join | or_none)"
-  printf -- '- Unanswered PO questions: %s\n' "$(printf '%s' "$questions" | clean | or_none)"
-  printf -- '- Learnings written: %s\n' "$(git -C "$root" log --since="$since" --diff-filter=A --name-only --format= -- docs/ai/learnings/ |
-    while IFS= read -r f; do basename "$f" | clean; printf '\n'; done | join | or_none)"
-  # BSD find can't parse ISO dates in -newermt; compare against a reference file instead.
-  ref="$(mktemp)" && touch -d "$since" "$ref"
-  printf -- '- TRAPs written: %s\n' "$(find "$memory" -name 'trap_*.md' -newer "$ref" 2>/dev/null |
-    while IFS= read -r f; do basename "$f" | clean; printf '\n'; done | join | or_none)"
-  rm -f "$ref"
-  printf -- '- Retro issues filed: %s\n' "$(gh issue list --state all --search "label:retro created:>=$since" --json number,title |
-    jq -j '.[] | "#\(.number) \(.title)\u0000"' | clean_records | join | or_none)"
+  printf -- '- Merged PRs: %s\n' "$merged"
+  printf -- '- Open PRs and lanes: %s\n' "$open"
+  printf -- '- Next issues: %s\n' "$next"
+  printf -- '- Unanswered PO questions: %s\n' "$(printf '%s' "$questions" | clean | list)"
+  printf -- '- Learnings written: %s\n' "$learnings"
+  printf -- '- TRAPs written: %s\n' "$traps"
+  printf -- '- Retro issues filed: %s\n' "$retro"
 }
 
 cmd_check() {
-  local blockers issue since count
+  local blockers issue since merged count
   blockers="$(active_lanes)"
   if [[ -n "$blockers" ]]; then
     printf 'Session end blocked:\n%s\n' "$blockers"
@@ -98,7 +119,8 @@ cmd_check() {
   fi
   issue="$(handover_issue)" || exit 1
   since="$(since_of "$issue")" || exit 1
-  count="$(merged_prs "$since" | grep -c .)"
+  merged="$(merged_prs "$since")" || die "could not list merged PRs"
+  count="$(grep -c . <<< "$merged" || true)"
   if (( count >= 3 )); then
     printf '%s lanes merged since %s. Propose session end to the PO and wait for their "yes" before running: scripts/foreman-handover run\n' "$count" "$since"
   else
@@ -108,7 +130,11 @@ cmd_check() {
 
 cmd_run() {
   local questions=""
-  [[ "${1:-}" == --questions ]] && questions="${2:-}"
+  case "${1:-}" in
+    --questions) questions="${2:-}" ;;
+    "") ;;
+    *) die "usage: foreman-handover run [--questions TEXT]" ;;
+  esac
   [[ "${REX_SESSION:-}" =~ ^[a-zA-Z0-9_:-]+$ ]] || die "REX_SESSION is unset or invalid; run inside the foreman's Rex session"
 
   local blockers
@@ -116,21 +142,20 @@ cmd_run() {
   [[ -z "$blockers" ]] || die "refusing to kill the session:
 $blockers"
 
-  local issue since body url
+  local issue since body
   issue="$(handover_issue)" || exit 1
   since="$(since_of "$issue")" || exit 1
-  body="$(build_body "$since" "$questions" | head -n 25)"
-  url="$(printf '%s\n' "$body" | gh issue comment "$issue" --body-file - | clean)" || fail_step "post handover comment"
-  printf 'handover posted: %s\n' "$url"
+  # Each section is one line, so the body stays under 25 lines.
+  body="$(build_body "$since" "$questions")" || fail_step "collect handover data from gh/git"
 
-  local today n label msg cmd new_json sid
+  local today n label msg cmd new_json sid url
   today="$(date +%F)"
   n="$(rex session ls --json | jq -r --arg p "foreman-$today-" \
     '[.sessions[].label | select(startswith($p)) | ltrimstr($p) | tonumber? ] | (max // 0) + 1')" || n=1
   [[ "$n" =~ ^[0-9]+$ ]] || n=1
   label="foreman-$today-$n"
 
-  msg="You are the foreman; follow docs/agents/foreman.md. Handover from the previous foreman session ($url):
+  msg="You are the foreman; follow docs/agents/foreman.md. Handover from the previous foreman session:
 $body"
   # %q keeps the root path and handover inert inside bash -c (TRAP: print-and-paste shell injection).
   cmd="$(printf 'cd %q && claude %q' "$root" "$msg")"
@@ -142,6 +167,11 @@ $body"
   sleep 2
   rex session inspect "$sid" --json >/dev/null 2>&1 || fail_step "verify new session $sid"
   rex session rename "$sid" "$label" || fail_step "rename new session $sid to $label"
+
+  # Post only after the new session is up: the comment resets the "since" window for check.
+  url="$(printf '%s\n' "$body" | gh issue comment "$issue" --body-file - | clean)" ||
+    fail_step "post handover comment on issue #$issue (new session $label is up; kill it or this one by hand)"
+  printf 'handover posted: %s\n' "$url"
 
   printf 'new foreman session %s (%s) is up; killing this session\n' "$label" "$sid"
   # Last: this script runs inside the old session and dies with it.

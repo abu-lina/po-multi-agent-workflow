@@ -37,7 +37,8 @@ setup() {
 [{"number":31,"title":"low prio","labels":[{"name":"P3"},{"name":"area:docs"}]},
  {"number":32,"title":"second","labels":[{"name":"P2"},{"name":"area:infra"}]},
  {"number":33,"title":"top","labels":[{"name":"P1"},{"name":"area:auth"}]},
- {"number":34,"title":"same area as top","labels":[{"name":"P1"},{"name":"area:auth"}]}]
+ {"number":34,"title":"same area as top","labels":[{"name":"P1"},{"name":"area:auth"}]},
+ {"number":35,"title":"fourth area","labels":[{"name":"P3"},{"name":"area:db"}]}]
 EOF
   printf '[{"number":40,"title":"retro: lanes"}]' > "$mock/retro.json"
   printf '{"sessions":[{"session_id":"session:old","label":"foreman-%s-1"}]}' "$TODAY" > "$mock/sessions.json"
@@ -48,7 +49,7 @@ m="$MOCK_DIR"; args="$*"
 case "$args" in
   "issue list --label handover"*) cat "$m/handover_issue.json" ;;
   "issue view 7"*) cat "$m/handover_issue.json" | jq '.[0]' ;;
-  "pr list --state merged"*) cat "$m/merged.json" ;;
+  "pr list --state merged"*) [[ "${MOCK_GH_FAIL:-}" == merged ]] && exit 1; cat "$m/merged.json" ;;
   "pr list --state open"*) cat "$m/open.json" ;;
   "issue list --label ready"*) cat "$m/ready.json" ;;
   *"label:retro"*) cat "$m/retro.json" ;;
@@ -139,8 +140,8 @@ check "AC3: next issues in priority order (P1 #33 before P2 #32)" \
   "$(yes_if bash -c '[[ "$1" == *"#33"*"#32"* ]]' _ "$body")"
 check "AC3: next issues never share an area:* label (#34 skipped)" \
   "$(yes_if bash -c '! grep -q "#34" <<< "$1"' _ "$body")"
-check "AC3: next issues capped at 3" \
-  "$(yes_if bash -c '[[ "$1" == *"#31"* ]]' _ "$body")"
+check "AC3: next issues capped at 3 (#35, 4th distinct area, dropped)" \
+  "$(yes_if bash -c '[[ "$1" == *"#31"* && "$1" != *"#35"* ]]' _ "$body")"
 check "AC3: includes unanswered PO questions" "$(yes_if grep -q 'Ship dark mode first?' <<< "$body")"
 check "AC3: includes learnings written" "$(yes_if grep -q '41.md' <<< "$body")"
 check "AC3: includes TRAPs written" "$(yes_if grep -q 'trap_new-thing' <<< "$body")"
@@ -172,6 +173,7 @@ out="$(MOCK_REX_FAIL=new run_script run)"; rc=$?
 check "AC5: spawn failure -> non-zero exit" "$(yes_if test "$rc" -ne 0)"
 check "AC5: spawn failure -> error names the spawn step" "$(yes_if grep -qi 'spawn' <<< "$out")"
 check "AC5: spawn failure -> old session not killed" "$(yes_if bash -c '! grep -q "^session kill" "$1"' _ "$mock/rex.log")"
+check "AC5: spawn failure -> no handover comment, so the merge window is not reset" "$(yes_if test ! -f "$mock/comment_body")"
 : > "$mock/rex.log"
 out="$(MOCK_REX_FAIL=inspect run_script run)"
 check "AC5: verify failure -> error names the verify step" "$(yes_if grep -qi 'verify' <<< "$out")"
@@ -180,6 +182,17 @@ check "AC5: verify failure -> old session not killed" "$(yes_if bash -c '! grep 
 out="$(MOCK_REX_FAIL=rename run_script run)"
 check "AC5: rename failure -> error names the rename step" "$(yes_if grep -qi 'rename' <<< "$out")"
 check "AC5: rename failure -> old session not killed" "$(yes_if bash -c '! grep -q "^session kill" "$1"' _ "$mock/rex.log")"
+teardown
+
+setup
+out="$(MOCK_GH_FAIL=merged run_script run)"; rc=$?
+check "AC5: gh failure -> run exits non-zero" "$(yes_if test "$rc" -ne 0)"
+check "AC5: gh failure -> error names the collect step" "$(yes_if grep -qi 'collect' <<< "$out")"
+check "AC5: gh failure -> no handover with a wrong none is posted" "$(yes_if test ! -f "$mock/comment_body")"
+check "AC5: gh failure -> old session not killed" "$(yes_if bash -c '! grep -q "^session kill" "$1"' _ "$mock/rex.log")"
+out="$(MOCK_GH_FAIL=merged run_script check)"; rc=$?
+check "AC1: gh failure -> check errors instead of reporting 0 merged" \
+  "$(yes_if bash -c '[[ "$1" -ne 0 ]] && ! grep -q "0 lanes merged" <<< "$2"' _ "$rc" "$out")"
 teardown
 
 # ------------------------------------------------------------------
