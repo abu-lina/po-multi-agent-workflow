@@ -194,7 +194,15 @@ Include the learning sentence in the PR body and final issue comment.
 
 ## Session end
 
-**Trigger:** 3rd lane merged in this foreman session. "This session" means since the last comment on the pinned issue labelled `handover`. Token count is advisory only; hooks can't measure it.
+**Trigger:** 3rd lane merged in this foreman session. "This session" means since the last handover comment the script posted (first line `<!-- foreman-handover -->`) on the pinned issue labelled `handover`. Other comments don't count. Token count is advisory only; hooks can't measure it.
+
+**One-time setup.** The PO creates exactly one open issue labelled `handover` and pins it. The script never creates it, and it fails if there are none or more than one:
+
+```bash
+gh label create handover
+gh issue create --title "Foreman handover log" --label handover --body "Handover comments from scripts/foreman-handover."
+gh issue pin <number>
+```
 
 After each merge, run:
 
@@ -218,15 +226,15 @@ Then run:
 scripts/foreman-handover run --questions "<unanswered PO questions, or empty>"
 ```
 
-The script refuses while any lane is active and names the lane. Otherwise it:
+The script refuses while any lane is active and names the lane. It also refuses if `$REX_SESSION` isn't the session `rex whoami` reports. Otherwise it:
 
-1. Builds the handover (25 lines or fewer): merged PRs, open PRs and lanes, next 1 to 3 issues (priority order, no shared `area:*`), PO questions, learnings, TRAPs, retro issues.
+1. Builds the handover (25 lines or fewer): merged PRs, open PRs and lanes, next 1 to 3 issues (priority order, no shared `area:*`), PO questions, learnings (from `origin/main`), TRAPs, retro issues. All of it sits in a fenced block marked as untrusted data, titles cut to 80 characters.
 2. Starts a new Rex session in the main checkout running `claude`, with the handover as its first message.
-3. Verifies the new session and renames it `foreman-<date>-<n>`.
-4. Posts the handover as a comment on the `handover` issue. This comment starts the next session's merge count, so it goes up only once the new session is running.
+3. Waits for the `claude` prompt in the new session (30 tries, 1 s apart) and renames it `foreman-<date>-<n>`.
+4. Re-checks for active lanes, then posts the handover as a comment on the `handover` issue. This comment starts the next session's merge count, so it goes up only once the new session is running.
 5. Kills this session last.
 
-If any step fails, this session stays alive and the error names the failed step.
+If any step fails, this session stays alive and the error names the failed step. A failure after step 2 also kills the new session, so you never end up with two foremen. If the final kill fails, the error says so and prints the command to run by hand.
 
 ## Parallel lanes
 
