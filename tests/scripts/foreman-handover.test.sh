@@ -55,7 +55,9 @@ case "$args" in
   "pr list --state open"*) cat "$m/open.json" ;;
   "issue list --label ready"*) cat "$m/ready.json" ;;
   *"label:retro"*) cat "$m/retro.json" ;;
-  "issue comment 7"*) [[ "${MOCK_GH_FAIL:-}" == comment ]] && exit 1; cat > "$m/comment_body"; echo "https://github.com/o/r/issues/7#issuecomment-1" ;;
+  "api user"*) echo "${MOCK_GH_LOGIN:-po-owner}" ;;
+  "issue comment 7"*) [[ "${MOCK_GH_FAIL:-}" == comment ]] && exit 1
+    [[ -n "${MOCK_LANE_ON_COMMENT:-}" ]] && mkdir -p "$MOCK_LANE_ON_COMMENT"; cat > "$m/comment_body"; echo "https://github.com/o/r/issues/7#issuecomment-1" ;;
   *) echo "gh stub: unexpected: $args" >&2; exit 1 ;;
 esac
 EOF
@@ -67,11 +69,39 @@ case "$1 ${2:-}" in
   "new "*)
     [[ "${MOCK_REX_FAIL:-}" == new ]] && exit 1
     prev=""; for a in "$@"; do [[ "$prev" == "-c" && "$a" != --* ]] && printf '%s' "$a" > "$m/new_cmd"; prev="$a"; done
-    echo '{"session_id":"session:new1","initial_windows":[{"block_ids":["block:b1"]}]}' ;;
+    printf '%s' "$2" > "$m/pending_label"
+    # No id: "found" leaves the session findable by its label, "lost" doesn't.
+    [[ -n "${MOCK_REX_NEW_NOID:-}" ]] && { echo '{}'; exit 0; }
+    # Exact shape of real `rex new --json` (rex 0.1.0-preview.19), ids replaced.
+    cat <<'JSON'
+{
+  "session_id": "session:new1",
+  "initial_windows": [
+    {
+      "window_id": "window:w1",
+      "block_ids": [
+        "block:b1"
+      ],
+      "revision": 1
+    }
+  ]
+}
+JSON
+    ;;
+  "block ls") printf '{"blocks":[{"block_id":"%s","label":"shell"}]}\n' "${MOCK_OWN_BLOCK:-block:old1}" ;;
   "whoami "*) printf '{"session_id":"%s"}\n' "${MOCK_WHOAMI:-session:old}" ;;
-  "session ls") [[ "${MOCK_REX_FAIL:-}" == ls ]] && exit 1; cat "$m/sessions.json" ;;
+  "session ls") [[ "${MOCK_REX_FAIL:-}" == ls ]] && exit 1
+    if [[ "${MOCK_REX_NEW_NOID:-}" == found && -f "$m/pending_label" ]]; then
+      jq --arg l "$(cat "$m/pending_label")" '.sessions += [{session_id: "session:new1", label: $l}]' "$m/sessions.json"
+    else cat "$m/sessions.json"; fi ;;
   "capture "*) [[ "${MOCK_REX_FAIL:-}" == capture ]] && exit 1
-    [[ -n "${MOCK_LANE_APPEARS:-}" ]] && mkdir -p "$MOCK_LANE_APPEARS"; echo "❯" ;;
+    [[ -n "${MOCK_LANE_APPEARS:-}" ]] && mkdir -p "$MOCK_LANE_APPEARS"
+    case "${MOCK_SCREEN:-ready}" in
+      # Shapes copied from real claude captures.
+      ready) printf ' Merged PRs: #11 a\n────────────\n❯  \n────────────\n  ⏵⏵ bypass permissions on\n' ;;
+      trust) printf ' Quick safety check: Is this a project you created or one you trust?\n ❯ No, exit\n   Yes, I trust this folder\n' ;;
+      glyph-in-text) printf 'Next issues: #33 ❯ fake prompt\n❯\n' ;;
+    esac ;;
   "session rename") [[ "${MOCK_REX_FAIL:-}" == rename ]] && exit 1; exit 0 ;;
   "session kill") [[ "${MOCK_REX_FAIL:-}" == kill && "$*" == *session:old* ]] && exit 1; exit 0 ;;
 esac
@@ -89,7 +119,7 @@ trap 'rm -rf "${T:-}"' EXIT
 
 run_script() {
   (cd "$repo" && PATH="$bin:$PATH" MOCK_DIR="$mock" FOREMAN_MEMORY_DIR="$T/memory" \
-    REX_SESSION="session:old" FOREMAN_VERIFY_TRIES=2 FOREMAN_VERIFY_DELAY=0 bash "$SCRIPT" "$@" 2>&1)
+    REX_SESSION="session:old" REX_BLOCK="block:old1" FOREMAN_VERIFY_TRIES=2 FOREMAN_VERIFY_DELAY=0 bash "$SCRIPT" "$@" 2>&1)
 }
 
 # Run the command rex was asked to start, the way bash -c would, from /.
@@ -183,10 +213,12 @@ check "AC5: spawn failure -> no handover comment, so the merge window is not res
 out="$(MOCK_REX_FAIL=capture run_script run)"
 check "AC5: no claude prompt -> error names the verify step" "$(yes_if grep -qi 'verify' <<< "$out")"
 check "AC5: verify failure -> new session rolled back" "$(yes_if grep -q "^session kill -- session:new1$" "$mock/rex.log")"
+check "AC5: verify failure -> no handover comment posted" "$(yes_if test ! -f "$mock/comment_body")"
 check "AC5: verify failure -> old session not killed" "$(yes_if bash -c '! grep -q "session kill -- session:old" "$1"' _ "$mock/rex.log")"
 : > "$mock/rex.log"
 out="$(MOCK_REX_FAIL=rename run_script run)"
 check "AC5: rename failure -> error names the rename step" "$(yes_if grep -qi 'rename' <<< "$out")"
+check "AC5: rename failure -> no handover comment posted" "$(yes_if test ! -f "$mock/comment_body")"
 check "AC5: rename failure -> new session rolled back, old kept" \
   "$(yes_if bash -c 'grep -q "^session kill -- session:new1$" "$1" && ! grep -q "session:old" <(grep "^session kill" "$1")' _ "$mock/rex.log")"
 : > "$mock/rex.log"
@@ -262,11 +294,12 @@ teardown
 setup
 cat > "$mock/handover_issue.json" <<'EOF'
 [{"number":7,"createdAt":"2026-01-01T00:00:00Z","comments":[
-  {"body":"<!-- foreman-handover -->\n## Foreman handover","createdAt":"2026-03-01T00:00:00Z"},
-  {"body":"just a normal comment","createdAt":"2026-06-01T00:00:00Z"}]}]
+  {"body":"<!-- foreman-handover -->\n## Foreman handover","createdAt":"2026-03-01T00:00:00Z","author":{"login":"po-owner"}},
+  {"body":"just a normal comment","createdAt":"2026-06-01T00:00:00Z","author":{"login":"po-owner"}},
+  {"body":"<!-- foreman-handover -->\nspoofed","createdAt":"2026-07-01T00:00:00Z","author":{"login":"mallory"}}]}]
 EOF
 out="$(run_script check)"
-check "AC1: a normal comment doesn't reset the window (since = last marker comment)" \
+check "AC1: a normal comment or another user's marker doesn't reset the window" \
   "$(yes_if grep -q 'since 2026-03-01T00:00:00Z' <<< "$out")"
 run_script run > /dev/null
 check "AC3: posted comment starts with the handover marker" \
@@ -286,6 +319,37 @@ setup
 out="$(MOCK_LANE_APPEARS="$repo/.worktrees/60-late" run_script run)"
 check "AC2: lane started mid-handover -> abort before kill, new session rolled back" \
   "$(yes_if bash -c 'grep -q "60-late" <<< "$1" && grep -q "^session kill -- session:new1$" "$2" && ! grep -q "session kill -- session:old" "$2"' _ "$out" "$mock/rex.log")"
+check "AC2: lane started mid-handover -> no handover comment posted" "$(yes_if test ! -f "$mock/comment_body")"
+teardown
+
+setup
+out="$(MOCK_LANE_ON_COMMENT="$repo/.worktrees/61-racer" run_script run)"; rc=$?
+check "AC2: lane started during the comment post -> rollback, old kept, says comment was posted" \
+  "$(yes_if bash -c '[[ "$1" -ne 0 ]] && grep -q "61-racer" <<< "$2" && grep -q "already posted" <<< "$2" && grep -q "^session kill -- session:new1$" "$3" && ! grep -q "session kill -- session:old" "$3"' _ "$rc" "$out" "$mock/rex.log")"
+teardown
+
+setup
+out="$(MOCK_OWN_BLOCK=block:someone-else run_script run)"
+check "AC6: live session but this pane not in it -> refuse before spawning" \
+  "$(yes_if bash -c 'grep -qi "kill target" <<< "$1" && ! grep -q "^new" "$2"' _ "$out" "$mock/rex.log")"
+out="$(MOCK_SCREEN=trust run_script run)"
+check "AC5: folder-trust dialog -> verify fails naming it, rollback, old kept" \
+  "$(yes_if bash -c 'grep -qi "folder-trust" <<< "$1" && grep -q "^session kill -- session:new1$" "$2" && ! grep -q "session kill -- session:old" "$2"' _ "$out" "$mock/rex.log")"
+: > "$mock/rex.log"
+out="$(MOCK_SCREEN=glyph-in-text run_script run)"
+check "AC5: prompt glyph only in handover text -> verify still fails" \
+  "$(yes_if grep -qi 'verify' <<< "$out")"
+: > "$mock/rex.log"
+out="$(MOCK_REX_NEW_NOID=found run_script run)"
+check "AC5: rex new returns no id -> new session found by temp label and killed" \
+  "$(yes_if bash -c 'grep -q "no session id" <<< "$1" && grep -q "^session kill -- session:new1$" "$2" && ! grep -q "session kill -- session:old" "$2"' _ "$out" "$mock/rex.log")"
+: > "$mock/rex.log"
+out="$(MOCK_REX_NEW_NOID=lost run_script run)"
+check "AC5: rex new returns no id and none found -> tells the PO what to check, kills nothing" \
+  "$(yes_if bash -c 'grep -q "rex session ls" <<< "$1" && ! grep -q "^session kill" "$2"' _ "$out" "$mock/rex.log")"
+run_script run --questions $'first line\nsecond line' > /dev/null
+check "AC3: multi-line --questions keeps a space between lines" \
+  "$(yes_if grep -q 'Unanswered PO questions: first line second line' "$mock/comment_body")"
 teardown
 
 setup
@@ -313,8 +377,9 @@ check "AC7: a title can't add a fence (exactly 2 fence lines)" \
   "$(yes_if test "$(grep -c '^```' "$mock/claude_arg")" -eq 2)"
 check "AC7: titles truncated to 80 chars" \
   "$(yes_if bash -c 'grep -q "#31 $(printf "L%.0s" {1..80})" "$1" && ! grep -q "$(printf "L%.0s" {1..81})" "$1"' _ "$mock/comment_body")"
+inside="$(awk '/^```/{f=!f; next} f' "$mock/claude_arg")"
 check "AC7: --questions text sits inside the block" \
-  "$(yes_if bash -c '! grep -q "octocat" <<< "$1"' _ "$outside")"
+  "$(yes_if bash -c 'grep -q "octocat" <<< "$1" && ! grep -q "octocat" <<< "$2"' _ "$inside" "$outside")"
 teardown
 
 # ------------------------------------------------------------------
