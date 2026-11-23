@@ -413,7 +413,7 @@ setup
 MOCK_GH_FAIL=retro run_split run; rc=$?
 check "#53 AC3: build_body fails after mktemp -> run fails naming the collect step" \
   "$(yes_if bash -c '[[ "$1" -ne 0 ]] && grep -qi collect "$2"' _ "$rc" "$T/err")"
-check "#53 AC3: build_body fails after mktemp -> temp file removed" "$(yes_if test "$(tmp_count)" -eq 0)"
+check "#53 AC3: build_body fails at a later gh call -> no temp file left" "$(yes_if test "$(tmp_count)" -eq 0)"
 check "#53 AC3: build_body failure -> no unbound variable error" \
   "$(yes_if bash -c '! grep -q "unbound variable" "$1"' _ "$T/err")"
 teardown
