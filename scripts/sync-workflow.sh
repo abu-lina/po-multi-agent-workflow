@@ -35,6 +35,10 @@
 
 set -euo pipefail
 
+# This file is in SYNC_FILES and overwrites itself mid-run; bash reads scripts
+# incrementally, so parse the whole body (main) before running any of it.
+main() {
+
 TEMPLATE_REPO="abu-lina/po-multi-agent-workflow"
 TEMPLATE_BRANCH="main"
 
@@ -130,3 +134,8 @@ fi
 echo ""
 echo "Done. Run 'bash scripts/sync-workflow.sh --init' on first setup to also copy AGENTS.md,"
 echo "scripts/verify, and the init-only docs. Edit those files for your project."
+
+}
+
+main "$@"
+exit
