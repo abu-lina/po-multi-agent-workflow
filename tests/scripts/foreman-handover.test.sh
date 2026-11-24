@@ -48,6 +48,7 @@ EOF
   cat > "$bin/gh" <<'EOF'
 #!/usr/bin/env bash
 m="$MOCK_DIR"; args="$*"
+[[ -n "${GH_HOST:-}" ]] && { echo "none of the git remotes correspond to the GH_HOST" >&2; exit 1; }
 case "$args" in
   "issue list --label handover"*) jq '[.[] | {number}]' "$m/handover_issue.json" ;;
   "issue view 7"*) cat "$m/handover_issue.json" | jq '.[0]' ;;
@@ -142,6 +143,15 @@ printf '[{"number":11,"title":"feat: a"},{"number":12,"title":"fix: b"}]' > "$mo
 out="$(run_script check)"
 check "AC1: 2 merged lanes -> no proposal" \
   "$(yes_if bash -c '! grep -qi "propose session end" <<< "$1"' _ "$out")"
+teardown
+
+# ------------------------------------------------------------------
+# #57: an inherited GH_HOST must not break gh calls
+
+setup
+out="$(GH_HOST=other.example.com run_script check)"
+check "#57: inherited GH_HOST -> check still proposes a session end" \
+  "$(yes_if grep -qi 'propose session end' <<< "$out")"
 teardown
 
 # ------------------------------------------------------------------
