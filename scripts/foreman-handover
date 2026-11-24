@@ -8,6 +8,8 @@
 # open issue labelled `handover`. Run from the main checkout, inside the foreman's Rex session.
 
 set -uo pipefail
+# An inherited GH_HOST points gh at the wrong host and breaks every call below.
+unset GH_HOST
 
 MARKER='<!-- foreman-handover -->'
 SETUP='one-time setup: gh label create handover && gh issue create --title "Foreman handover log" --label handover --body "Handover comments from scripts/foreman-handover." && gh issue pin <number>'
