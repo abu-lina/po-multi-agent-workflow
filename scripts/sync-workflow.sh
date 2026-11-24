@@ -15,6 +15,7 @@
 #   scripts/lane
 #   scripts/lane.sh
 #   scripts/review-bundle
+#   scripts/foreman-handover
 #   .claude/settings.json
 #   .claude/hooks/fixed-proof-gate.sh
 #   .claude/hooks/post-write-check.sh
@@ -47,6 +48,7 @@ SYNC_FILES=(
   scripts/lane
   scripts/lane.sh
   scripts/review-bundle
+  scripts/foreman-handover
   .claude/settings.json
   .claude/hooks/fixed-proof-gate.sh
   .claude/hooks/post-write-check.sh
