@@ -15,6 +15,8 @@ REAL_GIT="$(command -v git)"
 
 # Stub gh: logs every call, fails like real gh when GH_HOST is set at all (even empty).
 stub_dir="$(mktemp -d)"
+local_dir="" origin_dir=""
+trap 'rm -rf "$stub_dir" "$local_dir" "$origin_dir"' EXIT
 cat > "$stub_dir/gh" <<'EOF'
 #!/usr/bin/env bash
 printf '%s%s\n' "${GH_HOST+GH_HOST=$GH_HOST }" "$*" >> "$GH_LOG"
@@ -119,13 +121,13 @@ make_repos
 "$REAL_GIT" -C "$local_dir" push -q origin main:refs/heads/fix/9004-kept
 mkdir -p "$local_dir/.worktrees"
 : > "$local_dir/.worktrees/9004-kept"
-run_lane lane 9004 kept >/dev/null
+out="$(run_lane lane 9004 kept)"
 rc=$?
 check "AC5: failed lane start on existing branch returns non-zero" "$([ $rc -ne 0 ] && echo 1 || echo 0)"
+check "AC5: failure came from the worktree step, not earlier" "$(yes_if grep -q 'already exists' <<<"$out")"
 check "AC5: failed lane start leaves the pre-existing remote branch" "$(yes_if remote_has fix/9004-kept)"
 rm -rf "$local_dir" "$origin_dir"
 
-rm -rf "$stub_dir"
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ "$FAIL" == "0" ]] || exit 1
