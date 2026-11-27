@@ -116,6 +116,20 @@ check "AC4: failed lane start deletes the remote branch it created" "$(yes_if re
 rm -rf "$local_dir" "$origin_dir"
 
 # ------------------------------------------------------------------
+# AC4: failure after git worktree add → no worktree dir and no remote branch left
+make_repos
+printf 'node_modules/\n' >> "$local_dir/.git/info/exclude"
+mkdir -p "$local_dir/node_modules"
+: > "$local_dir/node_modules/unreadable"
+chmod 000 "$local_dir/node_modules/unreadable"   # node_modules copy fails after worktree add
+out="$(run_lane lane 9005 late)"
+chmod 644 "$local_dir/node_modules/unreadable"
+check "AC4: late failure came from the node_modules copy" "$(yes_if grep -q 'could not clone node_modules' <<<"$out")"
+check "AC4: late failure leaves no worktree dir" "$([ ! -e "$local_dir/.worktrees/9005-late" ] && echo 1 || echo 0)"
+check "AC4: late failure leaves no remote branch" "$(yes_if remote_lacks fix/9005-late)"
+rm -rf "$local_dir" "$origin_dir"
+
+# ------------------------------------------------------------------
 # AC5: lane start fails on a pre-existing remote branch → branch kept
 make_repos
 "$REAL_GIT" -C "$local_dir" push -q origin main:refs/heads/fix/9004-kept
