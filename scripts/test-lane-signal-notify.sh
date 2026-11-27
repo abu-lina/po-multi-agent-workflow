@@ -97,6 +97,7 @@ stop
 rm -f "$stub/mv"
 check "AC9: mv fails -> .lane-signal removed" "$([[ ! -f "$lane/.lane-signal" ]] && echo 1 || echo 0)"
 check "AC9: mv fails -> no redelivery on next Stop" "$([[ $(grep -c 'handoff: PR #99' "$REX_LOG") -eq 1 ]] && echo 1 || echo 0)"
+check "AC9: mv fails -> no fallback after the real signal" "$([[ $(sends) -eq 1 ]] && echo 1 || echo 0)"
 
 # AC8: rerunning lane <issue> on an existing lane removes .lane-signal-fallback
 repo="$tmp/ac8"

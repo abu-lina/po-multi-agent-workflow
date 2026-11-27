@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook: deliver .lane-signal to the foreman's Rex pane and delete it.
+# Stop hook: deliver .lane-signal to the foreman's Rex pane, then move it to .lane-signal-sent.
 # Non-blocking — always exits 0.
 
 cat > /dev/null  # consume stdin
@@ -44,5 +44,7 @@ fi
 
 rex send -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" "Lane #$ISSUE: $signal" 2>/dev/null &&
   rex send-key -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" enter 2>/dev/null
-# Consume the signal regardless of rex success; if mv fails, rm so it never redelivers.
-mv "$root/.lane-signal" "$root/.lane-signal-sent" 2>/dev/null || rm -f "$root/.lane-signal"
+# Consume the signal regardless of rex success; if mv fails, rm it and still leave the
+# -sent marker so the next Stop neither redelivers nor sends the fallback.
+mv "$root/.lane-signal" "$root/.lane-signal-sent" 2>/dev/null ||
+  { rm -f "$root/.lane-signal"; : > "$root/.lane-signal-sent"; } 2>/dev/null
