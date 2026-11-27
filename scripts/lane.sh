@@ -105,8 +105,14 @@ _lane_setup_hooks() {
   cp -R "$root/$hooks" "$dir/$hooks"
 }
 
+# An inherited GH_HOST that matches no remote makes gh refuse to run. env -u scopes
+# the unset to gh; a bare unset would leak into the shell that sourced this file.
+_lane_gh() {
+  env -u GH_HOST gh "$@"
+}
+
 _lane_type() {
-  case "$(gh issue view "$1" --json labels --jq '[.labels[].name|select(startswith("type:"))][0]')" in
+  case "$(_lane_gh issue view "$1" --json labels --jq '[.labels[].name|select(startswith("type:"))][0]')" in
     type:feature) echo feat ;;
     type:bugfix | type:hotfix | type:security) echo fix ;;
     type:refactor) echo refactor ;;
@@ -327,9 +333,32 @@ lane() {
   dir="$root/.worktrees/$issue-$slug"
   _lane_base >/dev/null || return 1
   _lane_check_main || return 1
+  local created_branch=""
   if ! git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-    gh issue develop "$issue" --name "$branch" --base main || return 1
+    _lane_gh issue develop "$issue" --name "$branch" --base main || return 1
+    created_branch=1
   fi
+  if ! _lane_add_worktree "$root" "$dir" "$branch" "$issue"; then
+    # Only remove what this call created; a pre-existing branch may hold someone's work.
+    # The worktree goes too: the resume path trusts any existing dir and would skip
+    # .env.lane, hooks and node_modules.
+    if [[ -n "$created_branch" ]]; then
+      if [[ -d "$dir" ]] && ! git worktree remove --force "$dir"; then
+        echo "could not remove half-built worktree $dir; remove it manually" >&2
+      fi
+      git push -q origin --delete "$branch" ||
+        echo "could not delete remote branch $branch; remove it manually" >&2
+    fi
+    return 1
+  fi
+  port="$(_lane_port "$issue")"
+  printf 'lane #%s: %s on %s, port %s\n' "$issue" "$dir" "$branch" "$port"
+  _lane_rex_open "$agent" "$model" "$dir" "$dir/.env.lane" "$issue"
+}
+
+# Create and populate the worktree for a lane whose remote branch already exists.
+_lane_add_worktree() {
+  local root="$1" dir="$2" branch="$3" issue="$4" port
   git fetch -q origin "$branch" || return 1
   git worktree add "$dir" "$branch" || return 1
 
@@ -360,8 +389,6 @@ EOF
       { echo "could not clone node_modules into $dir" >&2; return 1; }
   fi
   _lane_setup_hooks "$root" "$dir" || { echo "could not copy git hooks into $dir" >&2; return 1; }
-  printf 'lane #%s: %s on %s, port %s\n' "$issue" "$dir" "$branch" "$port"
-  _lane_rex_open "$agent" "$model" "$dir" "$dir/.env.lane" "$issue"
 }
 
 lane_register() {
@@ -398,7 +425,7 @@ lane_done() {
 
   if [[ "$force" != "--force" ]]; then
     local state
-    state="$(GH_HOST="" gh pr view "$branch" --json state --jq .state 2>/dev/null)"
+    state="$(_lane_gh pr view "$branch" --json state --jq .state 2>/dev/null)"
     [[ "$state" != "MERGED" ]] && { echo "PR for $branch is '${state:-missing}', not MERGED. Use --force only after the owner agrees." >&2; return 1; }
     # .worktrees/ is excluded via .gitignore; only .env.lane needs explicit grep exclusion
     git -C "$dir" status --porcelain | grep -Evq '^.. \.env\.lane$' && { echo "$dir has uncommitted changes" >&2; return 1; }
@@ -452,7 +479,7 @@ lane_status() {
           if [[ -z "$branch" ]]; then
             printf '%s\t%s\t%s\t%s\n' "$worktree" "detached" "-" "-"
           else
-            pr_info="$(gh pr view "$branch" --json state,statusCheckRollup 2>/dev/null)"
+            pr_info="$(_lane_gh pr view "$branch" --json state,statusCheckRollup 2>/dev/null)"
             if [[ -n "$pr_info" ]]; then
               pr_state="$(printf '%s\n' "$pr_info" | jq -r '.state // "none"')"
               ci_status="$(printf '%s\n' "$pr_info" | jq -r '
