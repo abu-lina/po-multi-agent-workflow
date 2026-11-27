@@ -9,7 +9,7 @@ PASS=0
 FAIL=0
 pass() { echo "PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
-check() { local label="$1" ok="$2"; [[ "$ok" == "1" ]] && pass "$label" || fail "$label"; }
+check() { if [[ "$2" == "1" ]]; then pass "$1"; else fail "$1"; fi; }
 
 stub="$(mktemp -d)"
 repo="$(mktemp -d)"

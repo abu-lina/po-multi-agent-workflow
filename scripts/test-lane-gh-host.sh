@@ -38,7 +38,7 @@ cat > "$stub_dir/rex" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in
   split) echo '{"block_ids":["block:lane-test"]}' ;;
-  capture) echo '❯' ;;
+  capture) printf '────────────\n❯  \n────────────\n' ;;
   send) cat >/dev/null ;;
 esac
 EOF
