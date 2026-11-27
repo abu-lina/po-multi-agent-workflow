@@ -32,6 +32,8 @@ if [[ ! -f "$root/.lane-signal" ]]; then
 fi
 
 signal="$(tr -dc '[:print:]' < "$root/.lane-signal")"
+# Every signal is delivered now, so cap what an agent can type into the foreman pane.
+signal="${signal:0:200}"
 [[ "$signal" =~ $SIGNAL_VOCAB_RE ]] || exit 0
 
 # On handoff, append a Final Summary section to .lane-notes.md for the foreman.
