@@ -326,7 +326,7 @@ lane() {
         rex block close "$old_block" -s "${old_session:-$REX_SESSION}" 2>/dev/null || true
       fi
       # Clear stale signal state from the previous session.
-      rm -f "$dir/.lane-signal" "$dir/.lane-signal-sent"
+      rm -f "$dir/.lane-signal" "$dir/.lane-signal-sent" "$dir/.lane-signal-fallback"
       # Update Rex coordinates so the Stop hook targets the current session.
       sed -i '' '/^REX_SESSION_ID=/d;/^FOREMAN_BLOCK=/d' "$dir/.env.lane"
       printf 'REX_SESSION_ID=%s\nFOREMAN_BLOCK=%s\n' "$REX_SESSION" "$REX_BLOCK" >> "$dir/.env.lane"

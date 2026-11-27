@@ -78,7 +78,7 @@ check "no-op in main checkout: rex not called" "$([ -z "$rex_calls" ] && echo 1 
 check "no-op in main checkout: .lane-signal preserved" "$([ -f "$d4/.lane-signal" ] && echo 1 || echo 0)"
 rm -rf "$d4"
 
-# Test 5: .lane-signal preserved when rex send fails
+# Test 5: .lane-signal consumed when rex send fails (no redelivery loop)
 cat > "$tmpbin/rex" <<ENDREX
 #!/usr/bin/env bash
 exit 1
@@ -89,7 +89,7 @@ printf 'ISSUE=42\nREX_SESSION_ID=ses1\nFOREMAN_BLOCK=blk1\n' > "$d5/.worktrees/4
 printf 'handoff: done' > "$d5/.worktrees/42-slug/.lane-signal"
 rm -f "$rex_log"
 MOCK_TOPLEVEL="$d5/.worktrees/42-slug" bash "$HOOK" <<< ""
-check ".lane-signal preserved when rex send fails" "$([ -f "$d5/.worktrees/42-slug/.lane-signal" ] && echo 1 || echo 0)"
+check ".lane-signal consumed even when rex send fails" "$([ ! -f "$d5/.worktrees/42-slug/.lane-signal" ] && echo 1 || echo 0)"
 check "Enter not pressed when rex send fails" "$([ ! -f "$rex_log" ] && echo 1 || echo 0)"
 rm -rf "$d5"
 # Restore passing rex for any further tests
@@ -168,7 +168,7 @@ got_fallback="$(cat "$rex_log" 2>/dev/null || echo "")"
 check "fallback: rex send called when .lane-signal absent" "$([ -n "$got_fallback" ] && echo 1 || echo 0)"
 check "fallback: message contains Lane #42" "$(echo "$got_fallback" | grep -q 'Lane #42' && echo 1 || echo 0)"
 check "fallback: message contains branch" "$(echo "$got_fallback" | grep -q "$branch_name" && echo 1 || echo 0)"
-check "fallback: message contains 'session ended without a signal'" "$(echo "$got_fallback" | grep -q 'session ended without a signal' && echo 1 || echo 0)"
+check "fallback: message contains 'turn ended, no signal yet'" "$(echo "$got_fallback" | grep -q 'turn ended, no signal yet' && echo 1 || echo 0)"
 rm -rf "$d10"
 
 # Test 11: fallback absent-signal with missing FOREMAN_BLOCK — silent exit, no rex call

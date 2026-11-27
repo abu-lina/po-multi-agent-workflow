@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop hook: deliver .lane-signal to the foreman's Rex pane and delete it.
+# Stop hook: deliver .lane-signal to the foreman's Rex pane, then move it to .lane-signal-sent.
 # Non-blocking — always exits 0.
 
 cat > /dev/null  # consume stdin
@@ -19,25 +19,24 @@ FOREMAN_BLOCK="$(_get_env FOREMAN_BLOCK "$root/.env.lane")"
 
 SIGNAL_VOCAB_RE='^(handoff|blocked): '
 
-if [[ -f "$root/.lane-signal-sent" ]]; then
-  exit 0
-fi
-
 if [[ ! -f "$root/.lane-signal" ]]; then
+  # One fallback per lane, and none after a real signal, so a dead lane still gets reported.
+  [[ -f "$root/.lane-signal-fallback" || -f "$root/.lane-signal-sent" ]] && exit 0
   branch="$(git -C "$root" rev-parse --abbrev-ref HEAD 2>/dev/null | tr -dc '[:print:]')"
   last_commit="$(git -C "$root" log -1 --format='%s' 2>/dev/null | tr -dc '[:print:]')"
-  msg="Lane #$ISSUE: session ended without a signal, branch: $branch, last commit: $last_commit"
+  msg="Lane #$ISSUE: turn ended, no signal yet (may be waiting on reviewers), branch: $branch, last commit: $last_commit"
   rex send -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" "$msg" 2>/dev/null &&
     rex send-key -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" enter 2>/dev/null
-  # Mark delivered so repeated exits don't re-send the fallback message.
-  printf 'no-signal fallback delivered\n' > "$root/.lane-signal-sent" 2>/dev/null
+  printf 'no-signal fallback delivered\n' > "$root/.lane-signal-fallback" 2>/dev/null
   exit 0
 fi
 
 signal="$(tr -dc '[:print:]' < "$root/.lane-signal")"
+# Every signal is delivered now, so cap what an agent can type into the foreman pane.
+signal="${signal:0:200}"
 [[ "$signal" =~ $SIGNAL_VOCAB_RE ]] || exit 0
 
-# On handoff, append a Final Summary section to .lane-notes.md for Alfred.
+# On handoff, append a Final Summary section to .lane-notes.md for the foreman.
 if [[ "$signal" == handoff:* && -f "$root/.lane-notes.md" ]]; then
   {
     printf '\n## Final Summary\n\n'
@@ -47,5 +46,7 @@ fi
 
 rex send -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" "Lane #$ISSUE: $signal" 2>/dev/null &&
   rex send-key -s "$REX_SESSION_ID" -b "$FOREMAN_BLOCK" enter 2>/dev/null
-# Mark as delivered regardless of rex success to prevent re-delivery loops.
-mv "$root/.lane-signal" "$root/.lane-signal-sent" 2>/dev/null || true
+# Consume the signal regardless of rex success; if mv fails, rm it and still leave the
+# -sent marker so the next Stop neither redelivers nor sends the fallback.
+mv "$root/.lane-signal" "$root/.lane-signal-sent" 2>/dev/null ||
+  { rm -f "$root/.lane-signal"; : > "$root/.lane-signal-sent"; } 2>/dev/null
