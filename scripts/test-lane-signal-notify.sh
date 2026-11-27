@@ -79,6 +79,15 @@ echo "done: all good" > "$lane/.lane-signal"
 stop
 check "AC6: off-vocabulary signal -> nothing sent" "$([[ ! -s "$REX_LOG" ]] && echo 1 || echo 0)"
 
+# Security (#63 review): a 5000-char signal reaches the foreman pane capped at 200 chars
+new_lane cap
+printf 'handoff: %s' "$(printf 'x%.0s' {1..5000})" > "$lane/.lane-signal"
+stop
+line="$(grep '^send -s ses1 -b blk1 ' "$REX_LOG")"
+msg="${line#send -s ses1 -b blk1 Lane #63: }"
+check "cap: 5000-char signal delivered once" "$([[ $(sends) -eq 1 ]] && echo 1 || echo 0)"
+check "cap: delivered signal is 200 chars" "$([[ ${#msg} -eq 200 ]] && echo 1 || echo 0)"
+
 # AC7: handoff with .lane-notes.md -> Final Summary appended with the signal
 new_lane ac7
 printf '# Notes\n' > "$lane/.lane-notes.md"
