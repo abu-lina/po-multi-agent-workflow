@@ -225,6 +225,30 @@ _lane_last_block() {
   done | tail -1
 }
 
+# Poll until the agent's input prompt appears (30 s max, 1 s interval).
+# claude: match the input box shape, a line holding only ❯ right under a ─ rule, because
+# the folder-trust dialog also shows "❯ No, exit" (same check as foreman-handover verify_new).
+# copilot/opencode: their input UI isn't verified, so any ❯ counts.
+_lane_wait_prompt() {
+  local agent="$1" block_id="$2" dir="$3" issue="$4" i=0 capture
+  while (( i < 30 )); do
+    capture="$(rex capture -s "$REX_SESSION" -b "$block_id" 2>/dev/null)" || capture=""
+    if [[ "$agent" == claude ]]; then
+      if [[ "$capture" == *"trust this folder"* ]]; then
+        printf 'claude is showing the folder-trust dialog for %s; trust it once in pane %s, then rerun: lane %s\n' "$dir" "$block_id" "$issue" >&2
+        return 1
+      fi
+      awk '/^─/ { rule = 1; next } rule && /^❯[[:space:]]*$/ { found = 1 } { rule = 0 } END { exit !found }' <<< "$capture" && return 0
+    elif [[ "$capture" == *❯* ]]; then
+      return 0
+    fi
+    sleep 1
+    i=$(( i + 1 ))
+  done
+  printf 'timed out waiting for prompt in block %s\n' "$block_id" >&2
+  return 1
+}
+
 _lane_rex_open() {
   local agent="$1" model="$2" dir="$3" env_file="$4" issue="$5"
   local agent_cmd block_id
@@ -251,18 +275,7 @@ _lane_rex_open() {
   printf 'LANE_BLOCK=%s\n' "$block_id" >> "$env_file" ||
     { printf 'could not write LANE_BLOCK to %s\n' "$env_file" >&2; return 1; }
 
-  # Poll until the shell prompt appears (30 s max, 1 s interval).
-  local i=0
-  while (( i < 30 )); do
-    local capture
-    capture="$(rex capture -s "$REX_SESSION" -b "$block_id" 2>/dev/null)" || true
-    if printf '%s\n' "$capture" | grep -q '❯'; then
-      break
-    fi
-    sleep 1
-    i=$(( i + 1 ))
-  done
-  (( i < 30 )) || { printf 'timed out waiting for prompt in block %s\n' "$block_id" >&2; return 1; }
+  _lane_wait_prompt "$agent" "$block_id" "$dir" "$issue" || return 1
 
   # Send the brief via stdin so multi-line text is delivered as a single paste,
   # not as individual keystrokes (newlines would fire Enter prematurely).
@@ -322,7 +335,7 @@ lane() {
     fi
     printf 'lane #%s: %s on %s\n' "$issue" "$dir" "$branch"
     _lane_rex_open "$agent" "$model" "$dir" "$dir/.env.lane" "$issue"
-    return 0
+    return
   fi
 
   [[ -z "$slug" ]] && { echo "new lane needs a slug: lane $issue <slug>" >&2; return 1; }
