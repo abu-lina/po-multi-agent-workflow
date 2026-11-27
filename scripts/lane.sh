@@ -340,9 +340,12 @@ lane() {
   fi
   if ! _lane_add_worktree "$root" "$dir" "$branch" "$issue"; then
     # Only remove what this call created; a pre-existing branch may hold someone's work.
-    # shortcut: a worktree added before the failure stays; rerunning lane resumes it and
-    # the lane's first push recreates the branch. Roll back the worktree too if that bites.
+    # The worktree goes too: the resume path trusts any existing dir and would skip
+    # .env.lane, hooks and node_modules.
     if [[ -n "$created_branch" ]]; then
+      if [[ -d "$dir" ]] && ! git worktree remove --force "$dir"; then
+        echo "could not remove half-built worktree $dir; remove it manually" >&2
+      fi
       git push -q origin --delete "$branch" ||
         echo "could not delete remote branch $branch; remove it manually" >&2
     fi
