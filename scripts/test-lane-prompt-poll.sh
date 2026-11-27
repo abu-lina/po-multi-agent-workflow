@@ -49,6 +49,17 @@ check "AC1: trust dialog -> message names the folder-trust dialog" "$(grep -qi '
 check "AC1: trust dialog -> message names the worktree" "$(grep -qF "$repo" <<< "$out" && echo 1 || echo 0)"
 check "AC1: trust dialog -> no brief pasted" "$(sent && echo 0 || echo 1)"
 
+# AC1 on rerun: re-entering an existing lane (the documented recovery path) also stops non-zero
+git -C "$repo" commit -q --allow-empty -m init
+git -C "$repo" worktree add -q "$repo/.worktrees/48-trust" -b fix/48-trust
+: > "$repo/.worktrees/48-trust/.env.lane"
+: > "$stub/rex.log"
+out="$(cd "$repo" && PATH="$stub:$PATH" REX_LOG="$stub/rex.log" MOCK_SCREEN=trust REX_SESSION=session:test REX_BLOCK=block:foreman \
+  bash -c 'source "$1"; sleep() { :; }; lane 48 "" claude sonnet' _ "$LANE_SH" 2>&1)"; rc=$?
+check "AC1: trust dialog on rerun -> lane returns non-zero" "$([[ $rc -ne 0 ]] && echo 1 || echo 0)"
+check "AC1: trust dialog on rerun -> message names the folder-trust dialog" "$(grep -qi 'folder-trust' <<< "$out" && echo 1 || echo 0)"
+check "AC1: trust dialog on rerun -> no brief pasted" "$(sent && echo 0 || echo 1)"
+
 # AC2: input box ready -> brief sent as today
 out="$(run_open ready)"; rc=$?
 check "AC2: input box ready -> lane returns 0" "$([[ $rc -eq 0 ]] && echo 1 || echo 0)"
